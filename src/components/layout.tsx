@@ -1,0 +1,56 @@
+import type { ReactNode } from 'react'
+import { Heart, Home, Settings, Sparkles } from 'lucide-react'
+import { Link, useLocation } from 'wouter'
+
+export function Layout({ children }: { children: ReactNode }) {
+  const [location] = useLocation()
+
+  return (
+    <div className="relative flex min-h-screen flex-col overflow-hidden">
+      <div className="pointer-events-none fixed top-0 left-0 -z-10 h-full w-full">
+        <div className="absolute top-[-10%] left-[-10%] h-[40%] w-[40%] rounded-full bg-primary/10 blur-[100px]" />
+        <div className="absolute right-[-10%] bottom-[-10%] h-[50%] w-[50%] rounded-full bg-secondary/15 blur-[120px]" />
+      </div>
+
+      <header className="glass-card sticky top-0 z-40 w-full border-b-0 shadow-sm">
+        <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="group flex items-center gap-2 outline-none">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary shadow-lg shadow-primary/20 transition-all duration-300 group-hover:rotate-3 group-hover:scale-105">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-gradient font-display text-2xl leading-none font-extrabold tracking-tight">NikkiCode</span>
+              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                为暖暖玩家用心制作 <Heart className="h-3 w-3 fill-primary text-primary" />
+              </span>
+            </div>
+          </Link>
+
+          <nav className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="/"
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 font-semibold transition-all ${
+                location === '/' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-black/5 hover:text-foreground'
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              <span className="hidden sm:inline">兑换码</span>
+            </Link>
+            <a
+              href="/admin.html"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-muted-foreground transition-all hover:bg-black/5 hover:text-foreground"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">管理</span>
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">{children}</main>
+      <footer className="w-full py-8 text-center text-sm font-medium text-muted-foreground">
+        <p>及时获取最新兑换码福利</p>
+      </footer>
+    </div>
+  )
+}

@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 340 100% 98%;
+  --foreground: 340 30% 25%;
+  --card: 0 0% 100%;
+  --card-foreground: 340 30% 25%;
+  --card-border: 340 40% 94%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 340 30% 25%;
+  --popover-border: 340 40% 94%;
+  --primary: 340 85% 75%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 260 60% 85%;
+  --secondary-foreground: 260 40% 25%;
+  --muted: 340 20% 95%;
+  --muted-foreground: 340 15% 55%;
+  --accent: 45 100% 65%;
+  --accent-foreground: 45 50% 20%;
+  --destructive: 350 80% 65%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 340 30% 90%;
+  --input: 340 30% 90%;
+  --ring: 340 85% 75%;
+  --radius: 1rem;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Quicksand', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-image:
+      radial-gradient(at top left, rgba(255, 230, 240, 0.5) 0%, transparent 50%),
+      radial-gradient(at bottom right, rgba(230, 230, 255, 0.5) 0%, transparent 50%);
+    background-attachment: fixed;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Nunito', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply border border-white/50 bg-white/80 shadow-dreamy backdrop-blur-md;
+  }
+  .text-gradient {
+    @apply from-primary to-secondary bg-gradient-to-r bg-clip-text text-transparent;
+  }
+}
