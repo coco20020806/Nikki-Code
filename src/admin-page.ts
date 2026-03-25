@@ -16,7 +16,7 @@ root.innerHTML = `
           <option value="无限暖暖">无限暖暖</option>
           <option value="闪耀暖暖">闪耀暖暖</option>
         </select>
-        <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4 uppercase" required />
+        <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4" required />
         <input name="diamondReward" placeholder="钻石奖励（可选；留空则低价值）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="expiryAt" type="datetime-local" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
@@ -37,7 +37,6 @@ const status = document.getElementById('status') as HTMLParagraphElement
 const listWrap = document.getElementById('list') as HTMLDivElement
 
 function diamondSvg() {
-  // 简单钻石SVG（避免依赖React组件库）
   return `
     <svg viewBox="0 0 24 24" width="14" height="14" style="display:inline-block;vertical-align:middle;margin-right:6px;">
       <path d="M12 2 2 12l10 10 10-10L12 2Z" fill="hsl(var(--accent))" opacity="0.9"/>
@@ -101,7 +100,8 @@ form.addEventListener('submit', async (event) => {
     await addCode({
       password: String(data.get('password') ?? ''),
       gameName: String(data.get('gameName') ?? ''),
-      codeText: String(data.get('codeText') ?? ''),
+      // 直接获取输入值，不再强制转换大小写
+      codeText: String(data.get('codeText') ?? '').trim(),
       diamondReward: diamondReward || undefined,
       otherReward: otherReward || undefined,
       expiryAt: data.get('expiryAt') ? new Date(String(data.get('expiryAt'))).toISOString() : undefined,
