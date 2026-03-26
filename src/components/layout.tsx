@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { Heart, Home, Settings, Sparkles } from 'lucide-react'
+import { Heart, Home, Sparkles } from 'lucide-react'
 import { Link, useLocation } from 'wouter'
 
-export function Layout({ children }: { children: ReactNode }) {
+export function Layout({ children, rightSlot }: { children: ReactNode; rightSlot?: ReactNode }) {
   const [location] = useLocation()
 
   return (
@@ -36,13 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <Home className="h-4 w-4" />
               <span className="hidden sm:inline">兑换码</span>
             </Link>
-            <a
-              href="/admin.html"
-              className="flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-muted-foreground transition-all hover:bg-black/5 hover:text-foreground"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">管理</span>
-            </a>
+            {rightSlot}
           </nav>
         </div>
       </header>

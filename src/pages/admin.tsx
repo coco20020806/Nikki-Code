@@ -62,11 +62,18 @@ export default function Admin() {
               {error ? <p className="text-sm text-destructive">加载失败：{error}</p> : null}
             </div>
             <div className="space-y-4">
-              {codes.map((code) => (
+              {codes.map((code) => {
+                const gameBadgeClass =
+                  code.gameName === '无限暖暖'
+                    ? 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200'
+                    : code.gameName === '闪耀暖暖'
+                      ? 'bg-sky-100 text-sky-700 border border-sky-200'
+                      : ''
+                return (
                 <div key={code.id} className="flex flex-col justify-between gap-4 rounded-2xl border border-card-border bg-white/95 p-4 transition-colors hover:border-primary/30 sm:flex-row sm:items-center">
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex items-center gap-2">
-                      <Badge className="tracking-wide uppercase">{code.gameName}</Badge>
+                      <Badge className={`tracking-wide uppercase ${gameBadgeClass}`}>{code.gameName}</Badge>
                       {code.isHighValue ? <Badge variant="accent">高价值</Badge> : null}
                     </div>
                     <div className="font-mono text-lg font-bold text-foreground">{code.codeText}</div>
@@ -119,7 +126,8 @@ export default function Admin() {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
             </CardContent>
           </Card>

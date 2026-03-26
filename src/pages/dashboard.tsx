@@ -1,24 +1,60 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bell, Loader2 } from 'lucide-react'
+import { Bell, Loader2, MessageSquare, Send, Settings } from 'lucide-react'
 import { CodeCard } from '@/components/code-card'
 import { Layout } from '@/components/layout'
 import { useClaimedCodes } from '@/hooks/use-claimed-codes'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { listCodes } from '@/lib/codes-api'
+import { listCodes, submitFeedback } from '@/lib/codes-api'
 import type { Code } from '@/types/code'
 
 const GAME_FILTERS = ['全部', '无限暖暖', '闪耀暖暖']
+const STORAGE_KEY = 'nikki_preferences_v1'
 
 export default function Dashboard() {
   const [selectedGame, setSelectedGame] = useState<string>('全部')
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'unsupported'>('default')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedbackContent, setFeedbackContent] = useState('')
+  const [sendingFeedback, setSendingFeedback] = useState(false)
+  const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
+  const [warningThresholdHours, setWarningThresholdHours] = useState(24)
+  const [highValueOnly, setHighValueOnly] = useState(false)
   const [codes, setCodes] = useState<Code[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { claimedIds, claimCode, unclaimCode } = useClaimedCodes()
   const { toast } = useToast()
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as {
+        preferredGames?: string[]
+        warningThresholdHours?: number
+        highValueOnly?: boolean
+      }
+      if (Array.isArray(parsed.preferredGames)) setPreferredGames(parsed.preferredGames)
+      if (typeof parsed.warningThresholdHours === 'number') setWarningThresholdHours(parsed.warningThresholdHours)
+      if (typeof parsed.highValueOnly === 'boolean') setHighValueOnly(parsed.highValueOnly)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        preferredGames,
+        warningThresholdHours,
+        highValueOnly,
+      }),
+    )
+  }, [preferredGames, warningThresholdHours, highValueOnly])
 
   useEffect(() => {
     let active = true
@@ -44,7 +80,11 @@ export default function Dashboard() {
   }, [selectedGame])
 
   const sortedCodes = useMemo(() => {
-    return [...codes].sort((a, b) => {
+    const list = [...codes]
+      .filter((item) => preferredGames.includes(item.gameName))
+      .filter((item) => (highValueOnly ? Boolean(item.diamondReward?.trim()) : true))
+
+    return list.sort((a, b) => {
       const aClaimed = claimedIds.has(a.id)
       const bClaimed = claimedIds.has(b.id)
       if (aClaimed && !bClaimed) return 1
@@ -56,7 +96,14 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes])
+  }, [claimedIds, codes, preferredGames, highValueOnly])
+
+  const togglePreferredGame = (game: string, checked: boolean) => {
+    setPreferredGames((prev) => {
+      const next = checked ? [...new Set([...prev, game])] : prev.filter((g) => g !== game)
+      return next.length ? next : prev
+    })
+  }
 
   const handleEnablePush = async () => {
     if (!('Notification' in window)) {
@@ -74,12 +121,52 @@ export default function Dashboard() {
     }
   }
 
+  const handleSubmitFeedback = async () => {
+    if (!feedbackContent.trim()) {
+      toast({ title: '请先输入内容', variant: 'destructive' })
+      return
+    }
+    setSendingFeedback(true)
+    try {
+      await submitFeedback(feedbackContent)
+      toast({ title: '发送成功，管理员稍后会进行验证' })
+      setFeedbackContent('')
+      setFeedbackOpen(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '发送失败'
+      toast({ title: message, variant: 'destructive' })
+    } finally {
+      setSendingFeedback(false)
+    }
+  }
+
   return (
-    <Layout>
+    <Layout
+      rightSlot={
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFeedbackOpen(true)}
+            className="flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-muted-foreground transition-all hover:bg-black/5 hover:text-foreground"
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">投稿/反馈</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-muted-foreground transition-all hover:bg-black/5 hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+            <span className="hidden sm:inline">设置</span>
+          </button>
+        </div>
+      }
+    >
       <div className="mb-10 flex flex-col justify-between gap-6 text-center sm:flex-row sm:items-end sm:text-left">
         <div>
           <h1 className="mb-4 font-display text-4xl font-extrabold text-foreground md:text-5xl">最新兑换码</h1>
-          <p className="max-w-2xl text-lg text-muted-foreground">不要错过免费的钻石、体力等神奇道具！赶在过期前领取吧。</p>
+          <p className="max-w-2xl text-lg text-muted-foreground">不要错过免费的钻石鸭！赶在过期前领取吧~</p>
         </div>
 
         <Button
@@ -133,11 +220,99 @@ export default function Dashboard() {
         <motion.div layout className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {sortedCodes.map((code) => (
-              <CodeCard key={code.id} code={code} isClaimed={claimedIds.has(code.id)} onClaim={claimCode} onUnclaim={unclaimCode} />
+              <CodeCard
+                key={code.id}
+                code={code}
+                isClaimed={claimedIds.has(code.id)}
+                onClaim={claimCode}
+                onUnclaim={unclaimCode}
+                warningThresholdHours={warningThresholdHours}
+              />
             ))}
           </AnimatePresence>
         </motion.div>
       )}
+
+      {settingsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="glass-card w-full max-w-md rounded-3xl p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold">设置</h3>
+              <button type="button" onClick={() => setSettingsOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
+                关闭
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="mb-2 font-bold">关注的游戏</p>
+                <label className="mb-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={preferredGames.includes('无限暖暖')}
+                    onChange={(e) => togglePreferredGame('无限暖暖', e.target.checked)}
+                  />
+                  无限暖暖
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={preferredGames.includes('闪耀暖暖')}
+                    onChange={(e) => togglePreferredGame('闪耀暖暖', e.target.checked)}
+                  />
+                  闪耀暖暖
+                </label>
+              </div>
+
+              <div>
+                <p className="mb-2 font-bold">过期预警阈值</p>
+                <select
+                  className="h-10 w-full rounded-xl border border-input bg-white px-3"
+                  value={warningThresholdHours}
+                  onChange={(e) => setWarningThresholdHours(Number(e.target.value))}
+                >
+                  <option value={0}>关闭</option>
+                  <option value={1}>1 小时前</option>
+                  <option value={6}>6 小时前</option>
+                  <option value={12}>12 小时前</option>
+                  <option value={24}>24 小时前</option>
+                </select>
+              </div>
+
+              <label className="flex items-center justify-between rounded-xl border border-border bg-white p-3">
+                <span className="font-bold">仅显示高价值兑换码</span>
+                <input type="checkbox" checked={highValueOnly} onChange={(e) => setHighValueOnly(e.target.checked)} />
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {feedbackOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="glass-card w-full max-w-lg rounded-3xl p-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xl font-bold">玩家投稿信箱</h3>
+              <button type="button" onClick={() => setFeedbackOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
+                关闭
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-muted-foreground">如果你发现了新兑换码，或有任何使用建议，欢迎在这里告诉我们。</p>
+            <textarea
+              value={feedbackContent}
+              onChange={(e) => setFeedbackContent(e.target.value)}
+              placeholder="例如：无限暖暖新码 NIKKI888，来源官方微博..."
+              className="min-h-36 w-full rounded-2xl border border-input bg-white px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
+            />
+            <div className="mt-4 flex justify-end">
+              <Button type="button" onClick={handleSubmitFeedback} disabled={sendingFeedback} className="rounded-xl">
+                {sendingFeedback ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                发送
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </Layout>
   )
 }
