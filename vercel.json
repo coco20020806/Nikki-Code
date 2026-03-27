@@ -2,6 +2,6 @@
     "rewrites": [{ "source": "/admin", "destination": "/admin.html" }],
     "crons": [{
       "path": "/api/cron-push",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     }]
   }
