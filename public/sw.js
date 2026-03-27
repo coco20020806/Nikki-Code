@@ -11,6 +11,7 @@ self.addEventListener('push', (event) => {
   let title = 'NikkiCode'
   let body = '有新消息'
   let url = '/'
+  const hasPushPayload = Boolean(event.data)
 
   if (event.data) {
     try {
@@ -25,16 +26,24 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/favicon.svg',
-      badge: '/favicon.svg',
-      data: { url },
-      tag: 'nikki-push',
-      renotify: true,
-    }),
-  )
+  const show = self.registration.showNotification(title, {
+    body,
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    data: { url },
+    tag: 'nikki-push',
+    renotify: true,
+  })
+
+  /** PWA 桌面/程序坞角标（需 Chromium 系等支持 Badging API） */
+  const badge =
+    hasPushPayload &&
+    typeof self.navigator !== 'undefined' &&
+    'setAppBadge' in self.navigator
+      ? self.navigator.setAppBadge(1).catch(() => {})
+      : Promise.resolve()
+
+  event.waitUntil(Promise.all([show, badge]))
 })
 
 self.addEventListener('notificationclick', (event) => {
