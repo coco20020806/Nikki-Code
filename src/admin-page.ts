@@ -28,11 +28,14 @@ root.innerHTML = `
       </div>
     </section>
     <section class="glass-card" style="padding:16px 18px;border-radius:16px;margin-bottom:14px;">
-      <h2 style="margin:0 0 6px;font-size:16px;">Web Push 测试</h2>
+      <h2 style="margin:0 0 10px;font-size:16px;">全服 Web Push 测试</h2>
+      <div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;border:2px solid hsl(var(--accent));background:rgba(250,204,21,0.12);font-size:13px;line-height:1.55;font-weight:700;color:hsl(var(--foreground));">
+        请确保你已在<strong>手机 PWA（主屏幕版）</strong>中点击了「开启推送提醒」，否则数据库里没有你的订阅数据。
+      </div>
       <p style="margin:0 0 10px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.45;">
-        请先在用户站点首页点击「开启推送提醒」完成订阅；再在本页（同一浏览器）点击按钮，向<strong>当前设备</strong>发送一条测试通知。需在 Vercel 配置 <code style="font-size:11px;">VAPID_PRIVATE_KEY</code>、<code style="font-size:11px;">VAPID_PUBLIC_KEY</code>（或与前端相同的 <code style="font-size:11px;">VITE_VAPID_PUBLIC_KEY</code>）及 <code style="font-size:11px;">VAPID_SUBJECT</code>。
+        点击按钮后，服务端会从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并向每台设备发送测试通知。需在 Vercel 配置 VAPID 密钥、<code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>（仅服务端）及 <code style="font-size:11px;">SUPABASE_URL</code> / <code style="font-size:11px;">VITE_SUPABASE_URL</code>。
       </p>
-      <button id="push-test-btn" type="button" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:800;cursor:pointer;font-size:13px;">发送测试推送</button>
+      <button id="push-test-btn" type="button" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:800;cursor:pointer;font-size:13px;">向所有订阅设备发送测试</button>
       <p id="push-test-msg" style="margin:8px 0 0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;">
@@ -722,37 +725,37 @@ pushTestBtn?.addEventListener('click', async () => {
   pushTestMsg.textContent = ''
   const password = getAdminPassword()
   if (!password) {
-    pushTestMsg.textContent = '请先输入并验证管理员密码'
+    pushTestMsg.textContent = '请先输入管理员密码'
     pushTestMsg.style.color = '#e11d48'
     return
   }
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    pushTestMsg.textContent = '当前浏览器不支持 Web 推送'
-    pushTestMsg.style.color = '#e11d48'
-    return
-  }
+  pushTestMsg.textContent = '正在向所有订阅设备发送…'
+  pushTestMsg.style.color = 'hsl(var(--muted-foreground))'
   try {
-    const reg = await navigator.serviceWorker.ready
-    const sub = await reg.pushManager.getSubscription()
-    if (!sub) {
-      pushTestMsg.textContent = '未找到推送订阅：请先在首页开启推送提醒'
-      pushTestMsg.style.color = '#e11d48'
-      return
-    }
-    pushTestMsg.textContent = '发送中...'
-    pushTestMsg.style.color = 'hsl(var(--muted-foreground))'
     const res = await fetch(getPushTestApiUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, subscription: sub.toJSON() }),
+      body: JSON.stringify({ password }),
     })
-    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string
+      ok?: boolean
+      total?: number
+      sent?: number
+      failed?: number
+    }
     if (!res.ok) {
       pushTestMsg.textContent = data.error || `请求失败（${res.status}）`
       pushTestMsg.style.color = '#e11d48'
       return
     }
-    pushTestMsg.textContent = '已发送。若未看到通知，请检查系统与本站点的通知权限。'
+    const total = data.total ?? 0
+    const sent = data.sent ?? 0
+    const failed = data.failed ?? 0
+    pushTestMsg.textContent =
+      total === 0
+        ? '完成：当前没有任何订阅记录（请确认用户已在 PWA 中开启推送）。'
+        : `完成：共 ${total} 条订阅，成功 ${sent}，失败 ${failed}。`
     pushTestMsg.style.color = '#15803d'
   } catch (e) {
     pushTestMsg.textContent = e instanceof Error ? e.message : '发送失败'
