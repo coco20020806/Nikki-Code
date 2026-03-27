@@ -7,42 +7,54 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-const DEFAULT_TITLE = '兑换码到期提醒'
-const DEFAULT_BODY = '请打开应用查看兑换码与到期提醒'
-
 self.addEventListener('push', (event) => {
-  let title = DEFAULT_TITLE
-  let body = DEFAULT_BODY
-  let url = '/'
-
+  // 1. 获取推送数据（无数据或非 JSON 时退化为空对象 / 纯文本 body）
+  let data = {}
   if (event.data) {
     try {
-      const payload = event.data.json()
-      if (payload.title && String(payload.title).trim()) title = String(payload.title)
-      if (payload.body != null && String(payload.body).trim()) body = String(payload.body)
-      else if (payload.message != null && String(payload.message).trim()) body = String(payload.message)
-      if (payload.url) url = String(payload.url)
-    } catch {
-      const text = event.data.text()
-      if (text && String(text).trim()) body = String(text)
+      data = event.data.json()
+    } catch (error) {
+      console.error('解析推送 JSON 失败:', error)
+      try {
+        const text = event.data.text()
+        if (text && String(text).trim()) data = { body: String(text) }
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
-  const show = self.registration.showNotification(title, {
+  const title = (data.title && String(data.title).trim()) || '提醒'
+  const body =
+    (data.body != null && String(data.body).trim()) ||
+    (data.message != null && String(data.message).trim()) ||
+    '您有一个兑换码即将到期'
+  const url = data.url ? String(data.url) : '/'
+
+  const badgeCount =
+    typeof data.badgeCount === 'number' && Number.isFinite(data.badgeCount) && data.badgeCount >= 0
+      ? Math.floor(data.badgeCount)
+      : 1
+
+  // 2. 显示文字通知（icon / badge 使用 PNG，通知栏小图标更稳）
+  const promiseChain = self.registration.showNotification(title, {
     body,
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/icon-192x192.png',
+    badge: '/icon-192x192.png',
     data: { url },
     tag: 'nikki-push',
     renotify: true,
   })
 
-  const badge =
-    typeof self.navigator !== 'undefined' && 'setAppBadge' in self.navigator
-      ? self.navigator.setAppBadge(1).catch(() => {})
-      : Promise.resolve()
+  // 3. 桌面 / 程序坞角标（数字可由 data.badgeCount 指定，默认 1）
+  let badgePromise = Promise.resolve()
+  if (typeof navigator !== 'undefined' && navigator.setAppBadge) {
+    badgePromise = navigator.setAppBadge(badgeCount).catch((error) => {
+      console.error('设置角标失败:', error)
+    })
+  }
 
-  event.waitUntil(Promise.all([show, badge]))
+  event.waitUntil(Promise.all([promiseChain, badgePromise]))
 })
 
 self.addEventListener('notificationclick', (event) => {
@@ -50,8 +62,8 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = event.notification.data?.url || '/'
 
   const clearBadge =
-    typeof self.navigator !== 'undefined' && 'clearAppBadge' in self.navigator
-      ? self.navigator.clearAppBadge().catch(() => {})
+    typeof navigator !== 'undefined' && navigator.clearAppBadge
+      ? navigator.clearAppBadge().catch(() => {})
       : Promise.resolve()
 
   const focusOrOpen = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
