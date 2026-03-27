@@ -522,6 +522,7 @@ aiDropzone.addEventListener('drop', async (e) => {
 })
 
 aiExtractBtn.addEventListener('click', async () => {
+  if (aiExtractBtn.disabled) return
   const text = aiTextInput.value.trim()
   if (!text && !currentImageBase64) {
     aiStatus.textContent = '请先粘贴文本或上传截图'
@@ -540,7 +541,26 @@ aiExtractBtn.addEventListener('click', async () => {
         image: currentImageBase64 || undefined,
       }),
     })
-    const data = (await resp.json()) as Array<{
+    const data = (await resp.json()) as
+      | Array<{
+          gameName?: string
+          codeText?: string
+          diamondReward?: string
+          otherReward?: string
+          expiryAt?: string
+          source?: string
+        }>
+      | { error?: string; message?: string }
+    if (!resp.ok) {
+      const errObj = data as { error?: string; message?: string }
+      if (errObj.error === 'QUOTA_EXCEEDED') {
+        aiStatus.textContent = 'AI 识图配额已满，请一分钟后重试，或尝试先手动输入。'
+        aiStatus.style.color = '#e11d48'
+        return
+      }
+      throw new Error(errObj.message || errObj.error || '识别失败')
+    }
+    const list = (Array.isArray(data) ? data : []) as Array<{
       error?: string
       gameName?: string
       codeText?: string
@@ -549,9 +569,7 @@ aiExtractBtn.addEventListener('click', async () => {
       expiryAt?: string
       source?: string
     }>
-    if (!resp.ok) throw new Error((data as unknown as { error?: string }).error || '识别失败')
-
-    const normalized = (Array.isArray(data) ? data : [])
+    const normalized = list
       .filter((item) => (item.codeText ?? '').trim())
       .map((item, index) => ({
         id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,

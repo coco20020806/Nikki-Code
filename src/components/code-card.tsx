@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { addHours, formatDistanceToNow, isBefore, parseISO } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { CheckCircle2, Clock, Copy, ExternalLink, Flag, Gift, Gem, Sparkles } from 'lucide-react'
+import { CheckCircle2, Clock, Copy, ExternalLink, Flag, Gift, Gem } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import type { Code } from '@/types/code'
 import { Badge } from '@/components/ui/badge'
@@ -85,17 +85,11 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
 
       <Card className="rounded-3xl border-none bg-transparent shadow-none">
       <div className="p-5 md:p-6">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0 flex items-center gap-2">
+        <div className="mb-3 flex items-start justify-between gap-2 overflow-x-auto">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             <Badge className={`tracking-wider uppercase ${gameBadgeClass}`}>{code.gameName}</Badge>
-            {code.isHighValue ? (
-              <Badge variant="accent" className="gap-1">
-                <Sparkles className="h-3 w-3" />
-                限定
-              </Badge>
-            ) : null}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             {isClaimed ? (
               <>
                 <div className="flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-600">

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 type ExtractInput = {
   text?: string
@@ -62,7 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const image = (body.image ?? '').trim()
     if (!text && !image) return res.status(400).json({ error: 'text or image is required' })
 
-    const ai = new GoogleGenAI({ apiKey })
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: SYSTEM_PROMPT }]
     if (text) parts.push({ text: `待提取文本：\n${text}` })
@@ -76,21 +77,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+    const result = await model.generateContent({
       contents: [{ role: 'user', parts }],
-      config: {
+      generationConfig: {
         temperature: 0.1,
         responseMimeType: 'application/json',
       },
     })
 
-    const raw = result.text ?? ''
+    const raw = result.response.text()
     const jsonText = extractJson(raw)
     const parsed = JSON.parse(jsonText)
     const data = Array.isArray(parsed) ? parsed : [parsed]
     return res.status(200).json(data)
   } catch (error) {
+    const statusCode = (error as { status?: number; code?: number })?.status ?? (error as { code?: number })?.code
+    if (statusCode === 429) {
+      return res.status(429).json({
+        error: 'QUOTA_EXCEEDED',
+        message: 'AI 助手需要休息（配额达上限），请一分钟后再试。',
+      })
+    }
     const message = error instanceof Error ? error.message : 'Extract failed'
     return res.status(500).json({ error: message })
   }
