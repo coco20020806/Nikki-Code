@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 type ExtractInput = {
   text?: string
@@ -62,8 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const image = (body.image ?? '').trim()
     if (!text && !image) return res.status(400).json({ error: 'text or image is required' })
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const ai = new GoogleGenAI({ apiKey })
 
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: SYSTEM_PROMPT }]
     if (text) parts.push({ text: `待提取文本：\n${text}` })
@@ -77,12 +76,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    const result = await model.generateContent({
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+      config: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
     })
 
-    const raw = result.response.text()
+    const raw = result.text ?? ''
     const jsonText = extractJson(raw)
     const parsed = JSON.parse(jsonText)
     const data = Array.isArray(parsed) ? parsed : [parsed]
