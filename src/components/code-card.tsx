@@ -8,7 +8,7 @@ import type { Code } from '@/types/code'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { reportIssue } from '@/lib/codes-api'
+import { reportIssue, type ReportType } from '@/lib/codes-api'
 
 interface CodeCardProps {
   code: Code
@@ -22,6 +22,7 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
   const { toast } = useToast()
   const [reported, setReported] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [reportSheetOpen, setReportSheetOpen] = useState(false)
 
   const expiryDate = code.expiryAt ? parseISO(code.expiryAt) : null
   const isExpired = expiryDate ? isBefore(expiryDate, new Date()) : false
@@ -42,14 +43,13 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
     }
   }
 
-  const handleReport = async () => {
+  const handleReport = async (type: ReportType) => {
     if (reported) return
-    const ok = confirm('确认该码已失效或虚假吗？')
-    if (!ok) return
     try {
-      await reportIssue(code.id)
+      await reportIssue(code.id, type)
       setReported(true)
-      toast({ title: '感谢反馈', description: '我们已收到你的报错。' })
+      setReportSheetOpen(false)
+      toast({ title: '报错已收到，作者会尽快核实' })
     } catch (err) {
       const msg = err instanceof Error ? err.message : '提交失败'
       toast({ title: '提交失败', description: msg, variant: 'destructive' })
@@ -159,7 +159,7 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
               variant="ghost"
               size="sm"
               disabled={reported}
-              onClick={handleReport}
+              onClick={() => setReportSheetOpen(true)}
               className="h-8 px-2 text-xs text-muted-foreground"
             >
               <Flag className="h-3.5 w-3.5" />
@@ -188,6 +188,25 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
         </div>
       </div>
       </Card>
+
+      {reportSheetOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-3 sm:items-center">
+          <div className="glass-card w-full max-w-sm rounded-2xl p-4">
+            <p className="mb-3 text-sm font-bold text-foreground">请选择报错类型</p>
+            <div className="grid gap-2">
+              <Button type="button" className="h-11 justify-start" onClick={() => handleReport('FAKE_CODE')}>
+                虚假兑换码
+              </Button>
+              <Button type="button" variant="secondary" className="h-11 justify-start" onClick={() => handleReport('REWARD_MISMATCH')}>
+                奖励不符
+              </Button>
+              <Button type="button" variant="ghost" className="h-11" onClick={() => setReportSheetOpen(false)}>
+                取消
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </motion.div>
   )
 }

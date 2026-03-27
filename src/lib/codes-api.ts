@@ -17,8 +17,16 @@ type CodeRow = {
 export type Submission = {
   id: number
   content: string
+  type: 'text' | 'image'
+  imageUrl?: string
+  isFeatured: boolean
   isRead: boolean
   createdAt: string
+}
+
+export type FeaturedImage = {
+  id: number
+  imageUrl: string
 }
 
 function mapRowToCode(row: CodeRow): Code {
@@ -59,7 +67,7 @@ export async function listCodes(game?: string, opts?: { includeInvalid?: boolean
     .order('is_high_value', { ascending: false })
     .order('expiry_at', { ascending: true, nullsFirst: false })
 
-  if (game && game !== '全部') query = query.eq('game_name', game)
+  if (game && game !== '未领取') query = query.eq('game_name', game)
   if (!includeInvalid) query = query.eq('is_invalid', false)
 
   const { data, error } = await query
@@ -109,9 +117,12 @@ export async function deleteCode(id: number, password: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-export async function reportIssue(codeId: number): Promise<void> {
+export type ReportType = 'FAKE_CODE' | 'REWARD_MISMATCH'
+
+export async function reportIssue(codeId: number, reportType: ReportType): Promise<void> {
   const { error } = await supabase.from('reports').insert({
     code_id: codeId,
+    report_type: reportType,
   })
   if (error) throw new Error(error.message)
 }
@@ -121,14 +132,40 @@ export async function submitFeedback(content: string): Promise<void> {
   if (!trimmed) throw new Error('内容不能为空')
   const { error } = await supabase.from('submissions').insert({
     content: trimmed,
+    type: 'text',
     is_read: false,
+    is_featured: false,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function submitImageFeeding(file: File): Promise<void> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const filePath = `feedings/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+  const { error: uploadError } = await supabase.storage.from('submissions').upload(filePath, file, {
+    upsert: false,
+    contentType: file.type || 'image/jpeg',
+  })
+  if (uploadError) throw new Error(uploadError.message)
+
+  const { data } = supabase.storage.from('submissions').getPublicUrl(filePath)
+  const { error } = await supabase.from('submissions').insert({
+    content: '',
+    type: 'image',
+    image_url: data.publicUrl,
+    is_read: false,
+    is_featured: false,
   })
   if (error) throw new Error(error.message)
 }
 
 type SubmissionRow = {
   id: number
-  content: string
+  content: string | null
+  type: 'text' | 'image' | null
+  image_url: string | null
+  is_featured: boolean | null
   is_read: boolean
   created_at: string
 }
@@ -137,14 +174,17 @@ export async function listSubmissions(password: string, showRead: boolean): Prom
   requireAdminPassword(password)
   let query = supabase
     .from('submissions')
-    .select('id,content,is_read,created_at')
+    .select('id,content,type,image_url,is_featured,is_read,created_at')
     .order('created_at', { ascending: false })
   if (!showRead) query = query.eq('is_read', false)
   const { data, error } = await query
   if (error) throw new Error(error.message)
   return (data as SubmissionRow[] | null ?? []).map((row) => ({
     id: row.id,
-    content: row.content,
+    content: row.content ?? '',
+    type: row.type === 'image' ? 'image' : 'text',
+    imageUrl: row.image_url ?? undefined,
+    isFeatured: Boolean(row.is_featured),
     isRead: row.is_read,
     createdAt: row.created_at,
   }))
@@ -154,4 +194,25 @@ export async function setSubmissionRead(password: string, id: number, isRead: bo
   requireAdminPassword(password)
   const { error } = await supabase.from('submissions').update({ is_read: isRead }).eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+export async function setSubmissionFeatured(password: string, id: number, isFeatured: boolean): Promise<void> {
+  requireAdminPassword(password)
+  const { error } = await supabase.from('submissions').update({ is_featured: isFeatured }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function listFeaturedImages(limit = 30): Promise<FeaturedImage[]> {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('id,image_url')
+    .eq('type', 'image')
+    .eq('is_featured', true)
+    .not('image_url', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? [])
+    .map((row) => ({ id: Number((row as { id: number }).id), imageUrl: String((row as { image_url: string }).image_url) }))
+    .filter((x) => Boolean(x.imageUrl))
 }

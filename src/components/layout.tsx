@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
-import { Heart, Home, Sparkles } from 'lucide-react'
-import { Link, useLocation } from 'wouter'
+import { Heart, Sparkles } from 'lucide-react'
+import { Link } from 'wouter'
 
 export function Layout({ children, rightSlot }: { children: ReactNode; rightSlot?: ReactNode }) {
-  const [location] = useLocation()
-
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
       <div className="pointer-events-none fixed top-0 left-0 -z-10 h-full w-full">
@@ -26,18 +24,7 @@ export function Layout({ children, rightSlot }: { children: ReactNode; rightSlot
             </div>
           </Link>
 
-          <nav className="flex items-center gap-2 sm:gap-4">
-            <Link
-              href="/"
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 font-semibold transition-all ${
-                location === '/' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-black/5 hover:text-foreground'
-              }`}
-            >
-              <Home className="h-4 w-4" />
-              <span className="hidden sm:inline">兑换码</span>
-            </Link>
-            {rightSlot}
-          </nav>
+          <nav className="flex items-center gap-2 sm:gap-4">{rightSlot}</nav>
         </div>
       </header>
 

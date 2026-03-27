@@ -1,5 +1,5 @@
 import './index.css'
-import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionRead, verifyAdminPassword } from '@/lib/codes-api'
+import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionFeatured, setSubmissionRead, verifyAdminPassword } from '@/lib/codes-api'
 import { format } from 'date-fns'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
@@ -298,20 +298,39 @@ async function refreshSubmissions() {
         (item) => `
         <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid hsl(var(--border));opacity:${item.isRead ? '0.55' : '1'};">
           <div style="min-width:0;flex:1;">
-            <div style="font-size:13px;line-height:1.6;text-decoration:${item.isRead ? 'line-through' : 'none'};">${item.content}</div>
+            ${
+              item.type === 'image' && item.imageUrl
+                ? `<a href="${item.imageUrl}" target="_blank" rel="noreferrer"><img src="${item.imageUrl}" alt="投稿图片" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid hsl(var(--border));" /></a>`
+                : `<div style="font-size:13px;line-height:1.6;text-decoration:${item.isRead ? 'line-through' : 'none'};">${item.content}</div>`
+            }
             <div style="margin-top:6px;font-size:11px;color:hsl(var(--muted-foreground));">
-              ${format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm')}
+              ${format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm')} / ${item.type === 'image' ? '图片投稿' : '文字投稿'}
             </div>
           </div>
-          <button
-            type="button"
-            data-action="toggle-read"
-            data-id="${item.id}"
-            data-is-read="${item.isRead ? '1' : '0'}"
-            style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--border));background:white;color:hsl(var(--foreground));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
-          >
-            ${item.isRead ? '取消已阅' : '已阅'}
-          </button>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+            <button
+              type="button"
+              data-action="toggle-read"
+              data-id="${item.id}"
+              data-is-read="${item.isRead ? '1' : '0'}"
+              style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--border));background:white;color:hsl(var(--foreground));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+            >
+              ${item.isRead ? '取消已阅' : '已阅'}
+            </button>
+            ${
+              item.type === 'image'
+                ? `<button
+                    type="button"
+                    data-action="toggle-featured"
+                    data-id="${item.id}"
+                    data-is-featured="${item.isFeatured ? '1' : '0'}"
+                    style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--accent)/0.45);background:${item.isFeatured ? 'hsl(var(--accent)/0.2)' : 'white'};color:hsl(var(--foreground));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+                  >
+                    ${item.isFeatured ? '取消精选' : '精选展示'}
+                  </button>`
+                : ''
+            }
+          </div>
         </div>
       `,
       )
@@ -415,8 +434,9 @@ listExpiredWrap.addEventListener('click', async (e) => {
 
 submissionsWrap.addEventListener('click', async (e) => {
   const target = e.target as HTMLElement | null
-  const btn = target?.closest('button[data-action="toggle-read"]') as HTMLButtonElement | null
+  const btn = target?.closest('button[data-action]') as HTMLButtonElement | null
   if (!btn) return
+  const action = btn.getAttribute('data-action')
   const id = Number(btn.getAttribute('data-id') ?? 0)
   if (!id) return
 
@@ -427,23 +447,47 @@ submissionsWrap.addEventListener('click', async (e) => {
     return
   }
 
-  const isRead = btn.getAttribute('data-is-read') === '1'
-  status.textContent = isRead ? '取消已阅中...' : '标记已阅中...'
-  status.style.color = 'hsl(var(--muted-foreground))'
-  try {
-    await setSubmissionRead(password, id, !isRead)
-    status.textContent = isRead ? '已恢复为未读' : '已标记为已阅'
-    status.style.color = '#15803d'
-    persistPassword(password)
-    await refreshSubmissions()
-  } catch (err) {
-    if (isAuthError(err)) {
-      clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
-      return
+  if (action === 'toggle-read') {
+    const isRead = btn.getAttribute('data-is-read') === '1'
+    status.textContent = isRead ? '取消已阅中...' : '标记已阅中...'
+    status.style.color = 'hsl(var(--muted-foreground))'
+    try {
+      await setSubmissionRead(password, id, !isRead)
+      status.textContent = isRead ? '已恢复为未读' : '已标记为已阅'
+      status.style.color = '#15803d'
+      persistPassword(password)
+      await refreshSubmissions()
+    } catch (err) {
+      if (isAuthError(err)) {
+        clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
+        return
+      }
+      const msg = err instanceof Error ? err.message : '更新失败'
+      status.textContent = `投稿操作失败：${msg}`
+      status.style.color = '#e11d48'
     }
-    const msg = err instanceof Error ? err.message : '更新失败'
-    status.textContent = `投稿操作失败：${msg}`
-    status.style.color = '#e11d48'
+    return
+  }
+
+  if (action === 'toggle-featured') {
+    const isFeatured = btn.getAttribute('data-is-featured') === '1'
+    status.textContent = isFeatured ? '取消精选中...' : '设置精选中...'
+    status.style.color = 'hsl(var(--muted-foreground))'
+    try {
+      await setSubmissionFeatured(password, id, !isFeatured)
+      status.textContent = isFeatured ? '已取消精选' : '已设置为精选展示'
+      status.style.color = '#15803d'
+      persistPassword(password)
+      await refreshSubmissions()
+    } catch (err) {
+      if (isAuthError(err)) {
+        clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
+        return
+      }
+      const msg = err instanceof Error ? err.message : '更新失败'
+      status.textContent = `精选操作失败：${msg}`
+      status.style.color = '#e11d48'
+    }
   }
 })
 
