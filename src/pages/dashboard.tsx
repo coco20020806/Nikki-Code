@@ -276,6 +276,8 @@ export default function Dashboard() {
                   <option value={6}>6 小时前</option>
                   <option value={12}>12 小时前</option>
                   <option value={24}>24 小时前</option>
+                  <option value={72}>3 天前</option>
+                  <option value={168}>7 天前</option>
                 </select>
               </div>
 

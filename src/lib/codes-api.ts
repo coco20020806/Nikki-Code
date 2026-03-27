@@ -46,6 +46,11 @@ function requireAdminPassword(password: string) {
   if (!expected || password !== expected) throw new Error('管理员密码错误')
 }
 
+export function verifyAdminPassword(password: string): boolean {
+  const expected = import.meta.env.VITE_ADMIN_PASSWORD
+  return Boolean(expected && password.trim() && password === expected)
+}
+
 export async function listCodes(game?: string, opts?: { includeInvalid?: boolean }): Promise<Code[]> {
   const includeInvalid = opts?.includeInvalid ?? false
   let query = supabase

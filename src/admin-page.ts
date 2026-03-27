@@ -1,5 +1,5 @@
 import './index.css'
-import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionRead } from '@/lib/codes-api'
+import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionRead, verifyAdminPassword } from '@/lib/codes-api'
 import { format } from 'date-fns'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
@@ -9,6 +9,19 @@ if (!root) throw new Error('admin root not found')
 
 root.innerHTML = `
   <main style="max-width:840px;margin:40px auto;padding:0 16px;">
+    <section class="glass-card" style="position:sticky;top:calc(env(safe-area-inset-top,0px) + 10px);z-index:20;padding:14px 18px;border-radius:16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div id="auth-status-wrap" style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:13px;color:hsl(var(--muted-foreground));">权限状态：</span>
+          <strong id="auth-status" style="font-size:13px;color:hsl(var(--muted-foreground));">未验证 🔒</strong>
+        </div>
+        <div id="auth-actions" style="display:flex;align-items:center;gap:8px;">
+          <input id="header-password" placeholder="管理员密码" style="height:34px;border:1px solid hsl(var(--input));border-radius:10px;padding:0 10px;background:#fff;font-size:12px;" type="password" />
+          <button id="header-verify-btn" type="button" style="height:34px;padding:0 12px;border:none;border-radius:10px;background:hsl(var(--primary));color:white;font-weight:700;cursor:pointer;font-size:12px;">验证</button>
+          <button id="reset-password-btn" type="button" style="display:none;border:0;background:transparent;color:hsl(var(--foreground));text-decoration:underline;cursor:pointer;font-size:12px;">退出/重置密码</button>
+        </div>
+      </div>
+    </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;">
       <h1 style="margin:0 0 8px;font-size:32px;">管理员录入</h1>
       <p style="margin:0 0 20px;color:hsl(var(--muted-foreground));">输入密码后可新增兑换码</p>
@@ -30,13 +43,6 @@ root.innerHTML = `
         <div id="pending-list"></div>
       </div>
       <form id="code-form" style="display:grid;gap:12px;">
-        <div id="auth-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-          <p id="auth-status" style="margin:0;font-size:13px;color:hsl(var(--muted-foreground));">请输入管理员密码</p>
-          <button id="reset-password-btn" type="button" style="display:none;border:0;background:transparent;color:hsl(var(--foreground));text-decoration:underline;cursor:pointer;font-size:12px;">退出/重置密码</button>
-        </div>
-        <div id="password-row">
-          <input name="password" placeholder="管理员密码" class="h-11 w-full rounded-xl border border-input bg-white px-4" type="password" />
-        </div>
         <select name="gameName" class="h-11 w-full rounded-xl border border-input bg-white px-4">
           <option value="无限暖暖">无限暖暖</option>
           <option value="闪耀暖暖">闪耀暖暖</option>
@@ -51,8 +57,15 @@ root.innerHTML = `
       <p id="status" style="margin-top:10px;"></p>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
-      <h2 style="margin:0 0 12px;font-size:24px;">最近兑换码</h2>
-      <div id="list"></div>
+      <h2 style="margin:0 0 12px;font-size:24px;">进行中兑换码</h2>
+      <div id="list-active"></div>
+      <div style="margin-top:14px;border-top:1px solid hsl(var(--border));padding-top:12px;">
+        <button id="toggle-expired-btn" type="button" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid hsl(var(--border));background:#fff;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;">
+          <span id="expired-title">查看已过期的兑换码 (0)</span>
+          <span id="expired-chevron">▾</span>
+        </button>
+        <div id="list-expired" style="display:none;margin-top:10px;"></div>
+      </div>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -69,13 +82,17 @@ root.innerHTML = `
 
 const form = document.getElementById('code-form') as HTMLFormElement
 const status = document.getElementById('status') as HTMLParagraphElement
-const listWrap = document.getElementById('list') as HTMLDivElement
+const listActiveWrap = document.getElementById('list-active') as HTMLDivElement
+const listExpiredWrap = document.getElementById('list-expired') as HTMLDivElement
+const toggleExpiredBtn = document.getElementById('toggle-expired-btn') as HTMLButtonElement
+const expiredTitle = document.getElementById('expired-title') as HTMLSpanElement
+const expiredChevron = document.getElementById('expired-chevron') as HTMLSpanElement
 const submissionsWrap = document.getElementById('submissions') as HTMLDivElement
 const showHistoryInput = document.getElementById('show-history') as HTMLInputElement
 const authStatus = document.getElementById('auth-status') as HTMLParagraphElement
-const passwordRow = document.getElementById('password-row') as HTMLDivElement
+const headerPasswordInput = document.getElementById('header-password') as HTMLInputElement
+const headerVerifyBtn = document.getElementById('header-verify-btn') as HTMLButtonElement
 const resetPasswordBtn = document.getElementById('reset-password-btn') as HTMLButtonElement
-const passwordInput = form.querySelector('input[name="password"]') as HTMLInputElement
 const gameNameInput = form.querySelector('select[name="gameName"]') as HTMLSelectElement
 const aiTextInput = document.getElementById('ai-text') as HTMLTextAreaElement
 const aiImageInput = document.getElementById('ai-image') as HTMLInputElement
@@ -86,6 +103,8 @@ const pendingListWrap = document.getElementById('pending-list') as HTMLDivElemen
 
 let currentPassword = localStorage.getItem(ADMIN_PASSWORD_KEY) ?? ''
 let currentImageBase64 = ''
+let showExpired = false
+let cachedExpiredRows: Awaited<ReturnType<typeof listCodes>> = []
 let pendingItems: Array<{
   id: string
   gameName: string
@@ -121,17 +140,18 @@ function clearPasswordAndRequireInput(message?: string) {
 
 function getAdminPassword(): string {
   if (currentPassword.trim()) return currentPassword.trim()
-  const value = String(passwordInput?.value ?? '').trim()
+  const value = String(headerPasswordInput?.value ?? '').trim()
   return value
 }
 
 function renderAuthState() {
-  const authed = Boolean(currentPassword.trim())
-  passwordRow.style.display = authed ? 'none' : 'block'
+  const authed = verifyAdminPassword(currentPassword)
+  headerPasswordInput.style.display = authed ? 'none' : 'inline-block'
+  headerVerifyBtn.style.display = authed ? 'none' : 'inline-block'
   resetPasswordBtn.style.display = authed ? 'inline-block' : 'none'
-  authStatus.textContent = authed ? '管理员已认证 ✅' : '请输入管理员密码'
+  authStatus.textContent = authed ? '已验证 ✅' : '未验证 🔒'
   authStatus.style.color = authed ? '#15803d' : 'hsl(var(--muted-foreground))'
-  if (passwordInput) passwordInput.value = currentPassword
+  headerPasswordInput.value = currentPassword
 }
 
 async function fileToDataUrl(file: File): Promise<string> {
@@ -181,7 +201,13 @@ function diamondSvg() {
 async function refreshList() {
   try {
     const rows = await listCodes()
-    listWrap.innerHTML = rows
+    const now = Date.now()
+    const activeRows = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
+    cachedExpiredRows = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
+
+    expiredTitle.textContent = `查看已过期的兑换码 (${cachedExpiredRows.length})`
+
+    listActiveWrap.innerHTML = activeRows
       .slice(0, 20)
       .map(
         (code) => `
@@ -215,10 +241,44 @@ async function refreshList() {
       `,
       )
       .join('')
+    if (!activeRows.length) {
+      listActiveWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">暂无进行中的兑换码。</p>`
+    }
+
+    if (showExpired) renderExpiredList()
   } catch (err) {
     const msg = err instanceof Error ? err.message : '读取失败'
-    listWrap.innerHTML = `<p style="color:#e11d48;">读取失败：${msg}</p>`
+    listActiveWrap.innerHTML = `<p style="color:#e11d48;">读取失败：${msg}</p>`
   }
+}
+
+function renderExpiredList() {
+  if (!cachedExpiredRows.length) {
+    listExpiredWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">暂无已过期兑换码。</p>`
+    return
+  }
+  listExpiredWrap.innerHTML = cachedExpiredRows
+    .map(
+      (code) => `
+      <div style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));opacity:0.5;">
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:800;">${code.gameName} - <code>${code.codeText}</code></div>
+          <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">
+            已过期：${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '未知'} / ${code.diamondReward ? `${diamondSvg()}${code.diamondReward} 钻石` : code.otherReward || code.rewardDesc || ''}
+          </div>
+        </div>
+        <button
+          type="button"
+          data-action="delete"
+          data-id="${code.id}"
+          style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--destructive)/0.35);background:transparent;color:hsl(var(--destructive));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+        >
+          删除
+        </button>
+      </div>
+    `,
+    )
+    .join('')
 }
 
 async function refreshSubmissions() {
@@ -292,7 +352,6 @@ form.addEventListener('submit', async (event) => {
     status.style.color = '#15803d'
     persistPassword(getAdminPassword())
     form.reset()
-    if (passwordInput) passwordInput.value = currentPassword
     await refreshList()
     await refreshSubmissions()
   } catch (err) {
@@ -306,11 +365,7 @@ form.addEventListener('submit', async (event) => {
   }
 })
 
-listWrap.addEventListener('click', async (e) => {
-  const target = e.target as HTMLElement | null
-  const btn = target?.closest('button[data-action="delete"]') as HTMLButtonElement | null
-  if (!btn) return
-
+const handleDeleteClick = async (btn: HTMLButtonElement) => {
   const id = Number(btn.getAttribute('data-id') ?? 0)
   if (!id) return
 
@@ -342,6 +397,20 @@ listWrap.addEventListener('click', async (e) => {
     status.textContent = `删除失败：${msg}`
     status.style.color = '#e11d48'
   }
+}
+
+listActiveWrap.addEventListener('click', async (e) => {
+  const target = e.target as HTMLElement | null
+  const btn = target?.closest('button[data-action="delete"]') as HTMLButtonElement | null
+  if (!btn) return
+  await handleDeleteClick(btn)
+})
+
+listExpiredWrap.addEventListener('click', async (e) => {
+  const target = e.target as HTMLElement | null
+  const btn = target?.closest('button[data-action="delete"]') as HTMLButtonElement | null
+  if (!btn) return
+  await handleDeleteClick(btn)
 })
 
 submissionsWrap.addEventListener('click', async (e) => {
@@ -386,9 +455,28 @@ form.addEventListener('input', () => {
   void refreshSubmissions()
 })
 
+headerVerifyBtn.addEventListener('click', () => {
+  const pwd = String(headerPasswordInput.value ?? '').trim()
+  if (!verifyAdminPassword(pwd)) {
+    clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
+    return
+  }
+  persistPassword(pwd)
+  status.textContent = '验证成功'
+  status.style.color = '#15803d'
+  void refreshSubmissions()
+})
+
 resetPasswordBtn.addEventListener('click', () => {
   clearPasswordAndRequireInput()
   window.location.reload()
+})
+
+toggleExpiredBtn.addEventListener('click', () => {
+  showExpired = !showExpired
+  listExpiredWrap.style.display = showExpired ? 'block' : 'none'
+  expiredChevron.textContent = showExpired ? '▴' : '▾'
+  if (showExpired) renderExpiredList()
 })
 
 aiImageInput.addEventListener('change', async () => {
