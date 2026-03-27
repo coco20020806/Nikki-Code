@@ -8,13 +8,17 @@ import { Toaster } from '@/components/ui/toaster'
 
 function useClearAppBadgeWhenVisible() {
   useEffect(() => {
-    if (!('clearAppBadge' in navigator)) return
+    if (typeof navigator === 'undefined' || !navigator.clearAppBadge) return
 
+    const nav = navigator as Navigator & { clearAppBadge: () => Promise<void> }
+
+    /** App 进入前台或首次挂载时清除角标（用户已看到应用） */
     const tryClear = () => {
       if (document.visibilityState !== 'visible') return
-      void (navigator as Navigator & { clearAppBadge: () => Promise<void> }).clearAppBadge().catch(() => {})
+      void nav.clearAppBadge().catch(() => {})
     }
 
+    void nav.clearAppBadge().catch(() => {})
     tryClear()
     document.addEventListener('visibilitychange', tryClear)
     return () => document.removeEventListener('visibilitychange', tryClear)

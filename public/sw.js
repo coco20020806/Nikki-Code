@@ -8,70 +8,69 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('push', (event) => {
-  // 1. 获取推送数据（无数据或非 JSON 时退化为空对象 / 纯文本 body）
-  let data = {}
-  if (event.data) {
-    try {
-      data = event.data.json()
-    } catch (error) {
-      console.error('解析推送 JSON 失败:', error)
-      try {
-        const text = event.data.text()
-        if (text && String(text).trim()) data = { body: String(text) }
-      } catch (_) {
-        /* ignore */
+  event.waitUntil(
+    (async () => {
+      let data = {}
+      if (event.data) {
+        try {
+          data = event.data.json()
+        } catch (error) {
+          console.error('解析推送 JSON 失败:', error)
+          try {
+            const text = event.data.text()
+            if (text && String(text).trim()) data = { body: String(text) }
+          } catch (_) {
+            /* ignore */
+          }
+        }
       }
-    }
-  }
 
-  const title = (data.title && String(data.title).trim()) || '提醒'
-  const body =
-    (data.body != null && String(data.body).trim()) ||
-    (data.message != null && String(data.message).trim()) ||
-    '您有一个兑换码即将到期'
-  const url = data.url ? String(data.url) : '/'
+      const title = (data.title && String(data.title).trim()) || '提醒'
+      const body =
+        (data.body != null && String(data.body).trim()) ||
+        (data.message != null && String(data.message).trim()) ||
+        '您有一个兑换码即将到期'
+      const url = data.url ? String(data.url) : '/'
 
-  const badgeCount =
-    typeof data.badgeCount === 'number' && Number.isFinite(data.badgeCount) && data.badgeCount >= 0
-      ? Math.floor(data.badgeCount)
-      : 1
+      const showP = self.registration.showNotification(title, {
+        body,
+        icon: '/icon-192x192.png',
+        badge: '/icon-192x192.png',
+        data: { url },
+        tag: 'nikki-push',
+        renotify: true,
+      })
 
-  // 2. 显示文字通知（icon / badge 使用 PNG，通知栏小图标更稳）
-  const promiseChain = self.registration.showNotification(title, {
-    body,
-    icon: '/icon-192x192.png',
-    badge: '/icon-192x192.png',
-    data: { url },
-    tag: 'nikki-push',
-    renotify: true,
-  })
+      /** 无 payload 时也要设置角标，避免 SW 在角标完成前被回收 */
+      const badgeP =
+        typeof navigator !== 'undefined' && navigator.setAppBadge
+          ? navigator.setAppBadge(1).catch((error) => {
+              console.error('设置角标失败:', error)
+            })
+          : Promise.resolve()
 
-  // 3. 桌面 / 程序坞角标（数字可由 data.badgeCount 指定，默认 1）
-  let badgePromise = Promise.resolve()
-  if (typeof navigator !== 'undefined' && navigator.setAppBadge) {
-    badgePromise = navigator.setAppBadge(badgeCount).catch((error) => {
-      console.error('设置角标失败:', error)
-    })
-  }
-
-  event.waitUntil(Promise.all([promiseChain, badgePromise]))
+      await Promise.all([showP, badgeP])
+    })(),
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = event.notification.data?.url || '/'
 
-  const clearBadge =
-    typeof navigator !== 'undefined' && navigator.clearAppBadge
-      ? navigator.clearAppBadge().catch(() => {})
-      : Promise.resolve()
-
-  const focusOrOpen = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-    for (const client of clientList) {
-      if (client.url && 'focus' in client) return client.focus()
-    }
-    if (self.clients.openWindow) return self.clients.openWindow(targetUrl)
-  })
-
-  event.waitUntil(Promise.all([clearBadge, focusOrOpen]))
+  event.waitUntil(
+    (async () => {
+      if (typeof navigator !== 'undefined' && navigator.clearAppBadge) {
+        await navigator.clearAppBadge().catch(() => {})
+      }
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          await client.focus()
+          return
+        }
+      }
+      if (self.clients.openWindow) await self.clients.openWindow(targetUrl)
+    })(),
+  )
 })

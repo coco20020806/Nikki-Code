@@ -309,18 +309,35 @@ export default function Dashboard() {
           <p className="max-w-2xl text-lg text-muted-foreground">不要错过免费的钻石鸭！赶在过期前领取吧~</p>
         </div>
 
-        <Button
-          onClick={handleEnablePush}
-          disabled={pushStatus === 'granted' || pushStatus === 'unsupported'}
-          className={`rounded-2xl px-6 py-3 ${
-            pushStatus === 'granted'
-              ? 'cursor-default bg-green-100 text-green-700'
-              : ''
-          }`}
-        >
-          <Bell className="h-5 w-5" />
-          {pushStatus === 'granted' ? '推送已开启 ✓' : pushStatus === 'unsupported' ? '您的浏览器不支持推送' : '开启推送提醒'}
-        </Button>
+        <div className="flex flex-col items-center gap-3 sm:items-end">
+          <Button
+            onClick={handleEnablePush}
+            disabled={pushStatus === 'granted' || pushStatus === 'unsupported'}
+            className={`rounded-2xl px-6 py-3 ${
+              pushStatus === 'granted'
+                ? 'cursor-default bg-green-100 text-green-700'
+                : ''
+            }`}
+          >
+            <Bell className="h-5 w-5" />
+            {pushStatus === 'granted' ? '推送已开启 ✓' : pushStatus === 'unsupported' ? '您的浏览器不支持推送' : '开启推送提醒'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-2xl border-2 border-dashed border-primary/50 px-5 py-2 text-sm font-bold text-primary hover:bg-primary/5"
+            onClick={() => {
+              if (navigator.setAppBadge) {
+                void navigator.setAppBadge(5).catch(() => {})
+                toast({ title: '已请求角标数字 5', description: '请返回主屏幕查看 PWA 图标是否出现红点/数字。' })
+              } else {
+                toast({ title: '当前环境不支持 App Badge', variant: 'destructive' })
+              }
+            }}
+          >
+            测试红点功能
+          </Button>
+        </div>
       </div>
 
       <div className="mb-8 flex flex-wrap items-center gap-2 overflow-x-auto pb-2">

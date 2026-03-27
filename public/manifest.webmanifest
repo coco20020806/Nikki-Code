@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "NikkiCode",
+  "short_name": "NikkiCode",
+  "description": "暖暖系列兑换码与到期提醒",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff5f8",
+  "theme_color": "#f472b6",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
