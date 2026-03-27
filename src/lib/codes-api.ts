@@ -202,6 +202,31 @@ export async function setSubmissionFeatured(password: string, id: number, isFeat
   if (error) throw new Error(error.message)
 }
 
+export type PushSubscriptionJSON = {
+  endpoint: string
+  expirationTime?: number | null
+  keys?: { p256dh: string; auth: string }
+}
+
+/** 将浏览器 Push 订阅写入 / 更新到 Supabase push_subscriptions（需先在数据库建表并配置 RLS，见仓库内 supabase/push_subscriptions.sql） */
+export async function upsertPushSubscription(sub: PushSubscriptionJSON): Promise<void> {
+  const endpoint = sub.endpoint?.trim()
+  const p256dh = sub.keys?.p256dh
+  const auth = sub.keys?.auth
+  if (!endpoint || !p256dh || !auth) throw new Error('推送订阅数据不完整')
+
+  const row = {
+    endpoint,
+    p256dh,
+    auth_key: auth,
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 512) : null,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error } = await supabase.from('push_subscriptions').upsert(row, { onConflict: 'endpoint' })
+  if (error) throw new Error(error.message)
+}
+
 export async function listFeaturedImages(limit = 30): Promise<FeaturedImage[]> {
   const { data, error } = await supabase
     .from('submissions')

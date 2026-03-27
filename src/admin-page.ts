@@ -1,5 +1,10 @@
 import './index.css'
+import { registerNikkiServiceWorker } from '@/lib/register-sw'
+import { getPushTestApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionFeatured, setSubmissionRead, verifyAdminPassword } from '@/lib/codes-api'
+
+registerNikkiServiceWorker()
+warnIfVapidKeysMissingInClient()
 import { format } from 'date-fns'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
@@ -21,6 +26,14 @@ root.innerHTML = `
           <button id="reset-password-btn" type="button" style="display:none;border:0;background:transparent;color:hsl(var(--foreground));text-decoration:underline;cursor:pointer;font-size:12px;">退出/重置密码</button>
         </div>
       </div>
+    </section>
+    <section class="glass-card" style="padding:16px 18px;border-radius:16px;margin-bottom:14px;">
+      <h2 style="margin:0 0 6px;font-size:16px;">Web Push 测试</h2>
+      <p style="margin:0 0 10px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.45;">
+        请先在用户站点首页点击「开启推送提醒」完成订阅；再在本页（同一浏览器）点击按钮，向<strong>当前设备</strong>发送一条测试通知。需在 Vercel 配置 <code style="font-size:11px;">VAPID_PRIVATE_KEY</code>、<code style="font-size:11px;">VAPID_PUBLIC_KEY</code>（或与前端相同的 <code style="font-size:11px;">VITE_VAPID_PUBLIC_KEY</code>）及 <code style="font-size:11px;">VAPID_SUBJECT</code>。
+      </p>
+      <button id="push-test-btn" type="button" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:800;cursor:pointer;font-size:13px;">发送测试推送</button>
+      <p id="push-test-msg" style="margin:8px 0 0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;">
       <h1 style="margin:0 0 8px;font-size:32px;">管理员录入</h1>
@@ -100,6 +113,8 @@ const aiDropzone = document.getElementById('ai-dropzone') as HTMLDivElement
 const aiExtractBtn = document.getElementById('ai-extract-btn') as HTMLButtonElement
 const aiStatus = document.getElementById('ai-status') as HTMLParagraphElement
 const pendingListWrap = document.getElementById('pending-list') as HTMLDivElement
+const pushTestBtn = document.getElementById('push-test-btn') as HTMLButtonElement | null
+const pushTestMsg = document.getElementById('push-test-msg') as HTMLParagraphElement | null
 
 let currentPassword = localStorage.getItem(ADMIN_PASSWORD_KEY) ?? ''
 let currentImageBase64 = ''
@@ -699,6 +714,49 @@ pendingListWrap.addEventListener('click', async (e) => {
       status.textContent = err instanceof Error ? err.message : '上线失败'
       status.style.color = '#e11d48'
     }
+  }
+})
+
+pushTestBtn?.addEventListener('click', async () => {
+  if (!pushTestMsg) return
+  pushTestMsg.textContent = ''
+  const password = getAdminPassword()
+  if (!password) {
+    pushTestMsg.textContent = '请先输入并验证管理员密码'
+    pushTestMsg.style.color = '#e11d48'
+    return
+  }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushTestMsg.textContent = '当前浏览器不支持 Web 推送'
+    pushTestMsg.style.color = '#e11d48'
+    return
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (!sub) {
+      pushTestMsg.textContent = '未找到推送订阅：请先在首页开启推送提醒'
+      pushTestMsg.style.color = '#e11d48'
+      return
+    }
+    pushTestMsg.textContent = '发送中...'
+    pushTestMsg.style.color = 'hsl(var(--muted-foreground))'
+    const res = await fetch(getPushTestApiUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, subscription: sub.toJSON() }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) {
+      pushTestMsg.textContent = data.error || `请求失败（${res.status}）`
+      pushTestMsg.style.color = '#e11d48'
+      return
+    }
+    pushTestMsg.textContent = '已发送。若未看到通知，请检查系统与本站点的通知权限。'
+    pushTestMsg.style.color = '#15803d'
+  } catch (e) {
+    pushTestMsg.textContent = e instanceof Error ? e.message : '发送失败'
+    pushTestMsg.style.color = '#e11d48'
   }
 })
 

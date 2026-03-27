@@ -18,6 +18,7 @@ import { useClaimedCodes } from '@/hooks/use-claimed-codes'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { listCodes, listFeaturedImages, submitFeedback, submitImageFeeding, type FeaturedImage } from '@/lib/codes-api'
+import { isVapidPublicKeyConfigured, subscribePushAndPersist, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import type { Code } from '@/types/code'
 
 const GAME_FILTERS = ['未领取', '无限暖暖', '闪耀暖暖']
@@ -123,6 +124,25 @@ export default function Dashboard() {
     if (supportTab !== 'coffee') setSupportQrExpanded(false)
   }, [supportTab])
 
+  useEffect(() => {
+    warnIfVapidKeysMissingInClient()
+    if (typeof window === 'undefined') return
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushStatus('unsupported')
+      return
+    }
+    void (async () => {
+      if (Notification.permission !== 'granted') return
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) setPushStatus('granted')
+      } catch {
+        // ignore
+      }
+    })()
+  }, [])
+
   const sortedCodes = useMemo(() => {
     const nowMs = Date.now()
     const list = [...codes]
@@ -156,18 +176,34 @@ export default function Dashboard() {
   }
 
   const handleEnablePush = async () => {
-    if (!('Notification' in window)) {
+    warnIfVapidKeysMissingInClient()
+
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       setPushStatus('unsupported')
-      toast({ title: '您的浏览器不支持推送通知', variant: 'destructive' })
+      toast({ title: '您的浏览器不支持 Web 推送（缺少 Notification / Service Worker / PushManager）', variant: 'destructive' })
       return
     }
 
-    const permission = await Notification.requestPermission()
-    if (permission === 'granted') {
-      setPushStatus('granted')
-      toast({ title: '推送提醒已开启！🌸' })
-    } else {
-      toast({ title: '请在浏览器设置中允许通知权限', variant: 'destructive' })
+    if (!isVapidPublicKeyConfigured()) {
+      toast({
+        title: '未配置 VAPID 公钥',
+        description: '请在构建环境变量中设置 VITE_VAPID_PUBLIC_KEY，并查看控制台说明。',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const ok = await subscribePushAndPersist()
+      if (ok) {
+        setPushStatus('granted')
+        toast({ title: '推送已开启，订阅已保存 🌸' })
+      } else {
+        toast({ title: '未授予通知权限或已取消', variant: 'destructive' })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '订阅或保存失败'
+      toast({ title: message, variant: 'destructive' })
     }
   }
 
