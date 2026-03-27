@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 
 type ExtractInput = {
   text?: string
@@ -62,8 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const image = (body.image ?? '').trim()
     if (!text && !image) return res.status(400).json({ error: 'text or image is required' })
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const ai = new GoogleGenAI({ apiKey })
 
     const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{ text: SYSTEM_PROMPT }]
     if (text) parts.push({ text: `待提取文本：\n${text}` })
@@ -71,21 +70,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const base64 = image.includes(',') ? image.split(',')[1] : image
       parts.push({
         inlineData: {
+          // 新版 SDK 要求 inlineData 传纯 base64 字符串，不含 data:image 前缀
           mimeType: 'image/png',
           data: base64,
         },
       })
     }
 
-    const result = await model.generateContent({
+    const result = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
       contents: [{ role: 'user', parts }],
-      generationConfig: {
+      config: {
         temperature: 0.1,
         responseMimeType: 'application/json',
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.LOW,
+        },
       },
     })
 
-    const raw = result.response.text()
+    const raw = result.text ?? ''
     const jsonText = extractJson(raw)
     const parsed = JSON.parse(jsonText)
     const data = Array.isArray(parsed) ? parsed : [parsed]
@@ -102,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (statusCode === 404 || /not found|model/i.test(message)) {
-      console.error('[Gemini] MODEL_NOT_FOUND: 请检查模型ID或SDK版本。当前模型: gemini-1.5-flash', {
+      console.error('[Gemini] MODEL_NOT_FOUND: 请检查模型ID或SDK版本。当前模型: gemini-3-flash-preview', {
         statusCode,
         message,
       })
