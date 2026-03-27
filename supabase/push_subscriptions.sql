@@ -7,6 +7,7 @@ create table if not exists public.push_subscriptions (
   p256dh text not null,
   auth_key text not null,
   user_agent text,
+  reminder_hours integer not null default 24,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

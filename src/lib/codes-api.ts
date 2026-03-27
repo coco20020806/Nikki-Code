@@ -208,18 +208,47 @@ export type PushSubscriptionJSON = {
   keys?: { p256dh: string; auth: string }
 }
 
+function pushApiUrl(path: string): string {
+  if (typeof window === 'undefined') return path
+  return new URL(path, `${window.location.origin}${import.meta.env.BASE_URL || '/'}`).toString()
+}
+
+const ALLOWED_PUSH_REMINDER_HOURS = new Set([1, 6, 12, 24])
+
+/** 将当前设备的 reminder_hours 同步到 Supabase（需已存在 push_subscriptions 记录） */
+export async function updatePushPreference(endpoint: string, reminderHours: number): Promise<void> {
+  const ep = endpoint.trim()
+  if (!ep) throw new Error('缺少推送 endpoint')
+  if (!ALLOWED_PUSH_REMINDER_HOURS.has(reminderHours)) throw new Error('reminder_hours 无效')
+
+  const res = await fetch(pushApiUrl('api/update-push-preference'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: ep, reminder_hours: reminderHours }),
+  })
+  const data = (await res.json().catch(() => ({}))) as { error?: string }
+  if (!res.ok) throw new Error(data.error || `更新失败（${res.status}）`)
+}
+
 /** 将浏览器 Push 订阅写入 / 更新到 Supabase push_subscriptions（需先在数据库建表并配置 RLS，见仓库内 supabase/push_subscriptions.sql） */
-export async function upsertPushSubscription(sub: PushSubscriptionJSON): Promise<void> {
+export async function upsertPushSubscription(
+  sub: PushSubscriptionJSON,
+  options?: { reminderHours?: number },
+): Promise<void> {
   const endpoint = sub.endpoint?.trim()
   const p256dh = sub.keys?.p256dh
   const auth = sub.keys?.auth
   if (!endpoint || !p256dh || !auth) throw new Error('推送订阅数据不完整')
+
+  const reminderHours = options?.reminderHours ?? 24
+  if (!ALLOWED_PUSH_REMINDER_HOURS.has(reminderHours)) throw new Error('reminder_hours 无效')
 
   const row = {
     endpoint,
     p256dh,
     auth_key: auth,
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 512) : null,
+    reminder_hours: reminderHours,
     updated_at: new Date().toISOString(),
   }
 

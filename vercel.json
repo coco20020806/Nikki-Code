@@ -1,5 +1,4 @@
 {
-    "rewrites": [
-      { "source": "/admin", "destination": "/admin.html" }
-    ]
-  }
+  "rewrites": [{ "source": "/admin", "destination": "/admin.html" }],
+  "crons": [{ "path": "/api/cron-push", "schedule": "*/10 * * * *" }]
+}

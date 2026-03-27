@@ -17,12 +17,20 @@ import { Layout } from '@/components/layout'
 import { useClaimedCodes } from '@/hooks/use-claimed-codes'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { listCodes, listFeaturedImages, submitFeedback, submitImageFeeding, type FeaturedImage } from '@/lib/codes-api'
+import {
+  listCodes,
+  listFeaturedImages,
+  submitFeedback,
+  submitImageFeeding,
+  updatePushPreference,
+  type FeaturedImage,
+} from '@/lib/codes-api'
 import { isVapidPublicKeyConfigured, subscribePushAndPersist, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import type { Code } from '@/types/code'
 
 const GAME_FILTERS = ['未领取', '无限暖暖', '闪耀暖暖']
 const STORAGE_KEY = 'nikki_preferences_v1'
+const PUSH_REMINDER_OPTIONS = [1, 6, 12, 24] as const
 
 function parseExpiryMs(expiryAt?: string): number | null {
   if (!expiryAt) return null
@@ -50,6 +58,7 @@ export default function Dashboard() {
   const [featuredImages, setFeaturedImages] = useState<FeaturedImage[]>([])
   const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
   const [warningThresholdHours, setWarningThresholdHours] = useState(24)
+  const [pushReminderHours, setPushReminderHours] = useState<number>(24)
   const [highValueOnly, setHighValueOnly] = useState(false)
   const [codes, setCodes] = useState<Code[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,10 +73,14 @@ export default function Dashboard() {
       const parsed = JSON.parse(raw) as {
         preferredGames?: string[]
         warningThresholdHours?: number
+        pushReminderHours?: number
         highValueOnly?: boolean
       }
       if (Array.isArray(parsed.preferredGames)) setPreferredGames(parsed.preferredGames)
       if (typeof parsed.warningThresholdHours === 'number') setWarningThresholdHours(parsed.warningThresholdHours)
+      if (typeof parsed.pushReminderHours === 'number' && (PUSH_REMINDER_OPTIONS as readonly number[]).includes(parsed.pushReminderHours)) {
+        setPushReminderHours(parsed.pushReminderHours)
+      }
       if (typeof parsed.highValueOnly === 'boolean') setHighValueOnly(parsed.highValueOnly)
     } catch {
       // ignore
@@ -80,10 +93,11 @@ export default function Dashboard() {
       JSON.stringify({
         preferredGames,
         warningThresholdHours,
+        pushReminderHours,
         highValueOnly,
       }),
     )
-  }, [preferredGames, warningThresholdHours, highValueOnly])
+  }, [preferredGames, warningThresholdHours, pushReminderHours, highValueOnly])
 
   useEffect(() => {
     let active = true
@@ -194,7 +208,7 @@ export default function Dashboard() {
     }
 
     try {
-      const ok = await subscribePushAndPersist()
+      const ok = await subscribePushAndPersist(pushReminderHours)
       if (ok) {
         setPushStatus('granted')
         toast({ title: '推送已开启，订阅已保存 🌸' })
@@ -401,6 +415,7 @@ export default function Dashboard() {
 
               <div>
                 <p className="mb-2 font-bold">过期预警阈值</p>
+                <p className="mb-2 text-xs text-muted-foreground">仅影响列表里兑换码卡片的「即将过期」高亮，与推送无关。</p>
                 <select
                   className="h-10 w-full rounded-xl border border-input bg-white px-3"
                   value={warningThresholdHours}
@@ -413,6 +428,44 @@ export default function Dashboard() {
                   <option value={24}>24 小时前</option>
                   <option value={72}>3 天前</option>
                   <option value={168}>7 天前</option>
+                </select>
+              </div>
+
+              <div>
+                <p className="mb-2 font-bold">到期提醒时机</p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  在到期前约选定小时数通过 PWA 推送提醒一次（需已开启推送）。更改后会同步到服务器。
+                </p>
+                <select
+                  className="h-10 w-full rounded-xl border border-input bg-white px-3"
+                  value={pushReminderHours}
+                  onChange={async (e) => {
+                    const v = Number(e.target.value)
+                    setPushReminderHours(v)
+                    try {
+                      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                        toast({ title: '已保存到本机', description: '当前环境不支持推送，开启推送后将使用此选项。' })
+                        return
+                      }
+                      const reg = await navigator.serviceWorker.ready
+                      const sub = await reg.pushManager.getSubscription()
+                      if (!sub) {
+                        toast({ title: '已保存到本机', description: '开启推送后将在订阅时写入服务器。' })
+                        return
+                      }
+                      await updatePushPreference(sub.endpoint, v)
+                      toast({ title: '到期提醒时机已同步' })
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : '同步失败'
+                      toast({ title: message, variant: 'destructive' })
+                    }
+                  }}
+                >
+                  {PUSH_REMINDER_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      到期前 {h} 小时
+                    </option>
+                  ))}
                 </select>
               </div>
 
