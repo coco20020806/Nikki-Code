@@ -41,13 +41,23 @@ self.addEventListener('push', (event) => {
         renotify: true,
       })
 
-      /** 无 payload 时也要设置角标，避免 SW 在角标完成前被回收 */
-      const badgeP =
-        typeof navigator !== 'undefined' && navigator.setAppBadge
-          ? navigator.setAppBadge(1).catch((error) => {
-              console.error('设置角标失败:', error)
-            })
-          : Promise.resolve()
+      /**
+       * 自动推送也点亮红点：始终硬编码 setAppBadge(1)，不依赖 payload 里的数字字段。
+       * 与 showNotification 并行，且整体在 event.waitUntil 内，避免 SW 提前被结束。
+       */
+      const badgeP = (async () => {
+        if (typeof navigator === 'undefined' || !navigator.setAppBadge) {
+          console.log('[NikkiCode SW] push: 无 setAppBadge，跳过角标')
+          return
+        }
+        console.log('[NikkiCode SW] push: 调用前 → navigator.setAppBadge(1)（硬编码）')
+        try {
+          await navigator.setAppBadge(1)
+          console.log('[NikkiCode SW] push: 调用后 → setAppBadge(1) 已成功')
+        } catch (error) {
+          console.error('[NikkiCode SW] push: 调用后 → setAppBadge(1) 失败', error)
+        }
+      })()
 
       await Promise.all([showP, badgeP])
     })(),
