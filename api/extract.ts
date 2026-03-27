@@ -92,13 +92,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(data)
   } catch (error) {
     const statusCode = (error as { status?: number; code?: number })?.status ?? (error as { code?: number })?.code
+    const message = error instanceof Error ? error.message : 'Extract failed'
+
     if (statusCode === 429) {
       return res.status(429).json({
         error: 'QUOTA_EXCEEDED',
         message: 'AI 助手需要休息（配额达上限），请一分钟后再试。',
       })
     }
-    const message = error instanceof Error ? error.message : 'Extract failed'
+
+    if (statusCode === 404 || /not found|model/i.test(message)) {
+      console.error('[Gemini] MODEL_NOT_FOUND: 请检查模型ID或SDK版本。当前模型: gemini-1.5-flash', {
+        statusCode,
+        message,
+      })
+      return res.status(500).json({
+        error: 'MODEL_NOT_FOUND',
+        message: 'Gemini 模型不可用，请检查模型名称或稍后重试。',
+      })
+    }
+
+    console.error('[Gemini] EXTRACT_FAILED', { statusCode, message })
     return res.status(500).json({ error: message })
   }
 }
