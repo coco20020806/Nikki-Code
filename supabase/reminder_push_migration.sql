@@ -1,8 +1,8 @@
 -- 到期推送提醒：在 Supabase SQL Editor 执行（若表已存在可分段执行）
 
--- 1) 订阅表增加偏好：提前多少小时提醒（与前端选项一致：1 / 6 / 12 / 24）
+-- 1) 订阅表增加偏好：巡逻档位小时数（与前端一致：24 / 72 / 168，默认 7 天）
 alter table public.push_subscriptions
-  add column if not exists reminder_hours integer not null default 24;
+  add column if not exists reminder_hours integer not null default 168;
 
 -- 2) 防重复：每个 endpoint + 兑换码 + 类型 只发一次（与 codes.id 对应）
 create table if not exists public.sent_notifications (

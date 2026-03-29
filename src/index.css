@@ -55,6 +55,9 @@
     letter-spacing: -0.015em;
     color: hsl(var(--foreground));
   }
+  details summary::-webkit-details-marker {
+    display: none;
+  }
 }
 
 @layer utilities {

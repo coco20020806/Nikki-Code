@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 
-const ALLOWED_REMINDER_HOURS = new Set([1, 6, 12, 24])
+const ALLOWED_REMINDER_HOURS = new Set([24, 72, 168])
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!endpoint) return res.status(400).json({ error: '缺少 endpoint' })
     if (!ALLOWED_REMINDER_HOURS.has(reminderHours)) {
-      return res.status(400).json({ error: 'reminder_hours 必须为 1、6、12 或 24' })
+      return res.status(400).json({ error: 'reminder_hours 必须为 24、72 或 168（对应 1天 / 3天 / 7天）' })
     }
 
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()

@@ -1,7 +1,16 @@
 import './index.css'
 import { registerNikkiServiceWorker } from '@/lib/register-sw'
 import { getPushTestApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
-import { addCode, deleteCode, listCodes, listSubmissions, setSubmissionFeatured, setSubmissionRead, verifyAdminPassword } from '@/lib/codes-api'
+import {
+  addCode,
+  deleteCode,
+  listCodes,
+  listSubmissions,
+  setSubmissionFeatured,
+  setSubmissionRead,
+  updateCode,
+  verifyAdminPassword,
+} from '@/lib/codes-api'
 
 registerNikkiServiceWorker()
 warnIfVapidKeysMissingInClient()
@@ -21,22 +30,11 @@ root.innerHTML = `
           <strong id="auth-status" style="font-size:13px;color:hsl(var(--muted-foreground));">未验证 🔒</strong>
         </div>
         <div id="auth-actions" style="display:flex;align-items:center;gap:8px;">
-          <input id="header-password" placeholder="管理员密码" style="height:34px;border:1px solid hsl(var(--input));border-radius:10px;padding:0 10px;background:#fff;font-size:12px;" type="password" />
-          <button id="header-verify-btn" type="button" style="height:34px;padding:0 12px;border:none;border-radius:10px;background:hsl(var(--primary));color:white;font-weight:700;cursor:pointer;font-size:12px;">验证</button>
+          <input id="header-password" placeholder="管理员密码" style="height:36px;border:1px solid hsl(var(--input));border-radius:999px;padding:0 14px;background:#fff;font-size:13px;" type="password" />
+          <button id="header-verify-btn" type="button" style="height:36px;padding:0 16px;border:none;border-radius:999px;background:hsl(var(--primary));color:white;font-weight:500;cursor:pointer;font-size:13px;">验证</button>
           <button id="reset-password-btn" type="button" style="display:none;border:0;background:transparent;color:hsl(var(--foreground));text-decoration:underline;cursor:pointer;font-size:12px;">退出/重置密码</button>
         </div>
       </div>
-    </section>
-    <section class="glass-card" style="padding:16px 18px;border-radius:16px;margin-bottom:14px;">
-      <h2 style="margin:0 0 10px;font-size:16px;">全服 Web Push 测试</h2>
-      <div style="margin-bottom:12px;padding:12px 14px;border-radius:12px;border:2px solid hsl(var(--accent));background:rgba(250,204,21,0.12);font-size:13px;line-height:1.55;font-weight:700;color:hsl(var(--foreground));">
-        请确保你已在<strong>手机 PWA（主屏幕版）</strong>中点击了「开启推送提醒」，否则数据库里没有你的订阅数据。
-      </div>
-      <p style="margin:0 0 10px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.45;">
-        点击按钮后，服务端会从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并向每台设备发送测试通知。需在 Vercel 配置 VAPID 密钥、<code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>（仅服务端）及 <code style="font-size:11px;">SUPABASE_URL</code> / <code style="font-size:11px;">VITE_SUPABASE_URL</code>。
-      </p>
-      <button id="push-test-btn" type="button" style="height:38px;padding:0 16px;border:none;border-radius:10px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:800;cursor:pointer;font-size:13px;">向所有订阅设备发送测试</button>
-      <p id="push-test-msg" style="margin:8px 0 0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;">
       <h1 style="margin:0 0 8px;font-size:32px;">管理员录入</h1>
@@ -51,7 +49,7 @@ root.innerHTML = `
         </div>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <p id="ai-status" style="margin:0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
-          <button id="ai-extract-btn" type="button" style="height:36px;padding:0 14px;border:none;border-radius:10px;background:hsl(var(--primary));color:white;font-weight:700;cursor:pointer;">识别</button>
+          <button id="ai-extract-btn" type="button" style="height:38px;padding:0 18px;border:none;border-radius:999px;background:hsl(var(--primary));color:white;font-weight:500;cursor:pointer;font-size:14px;">识别</button>
         </div>
       </div>
       <div style="margin-bottom:14px;padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
@@ -68,7 +66,14 @@ root.innerHTML = `
         <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="expiryAt" type="datetime-local" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="source" placeholder="来源（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <button class="rounded-xl bg-primary text-primary-foreground" style="height:44px;border:none;font-weight:700;cursor:pointer;">保存到 Supabase</button>
+        <label style="display:block;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">巡逻提醒范围（与用户推送偏好取交集；每日巡逻 7d/3d/1d 档）
+          <select name="codeReminder" class="mt-1.5 h-11 w-full rounded-xl border border-input bg-white px-4">
+            <option value="">7 天内（默认）</option>
+            <option value="72">3 天内</option>
+            <option value="24">1 天内</option>
+          </select>
+        </label>
+        <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">保存到 Supabase</button>
       </form>
       <p id="status" style="margin-top:10px;"></p>
     </section>
@@ -93,6 +98,45 @@ root.innerHTML = `
       </div>
       <div id="submissions" style="margin-top:12px;"></div>
     </section>
+    <details id="push-test-details" style="margin-top:20px;border-radius:20px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.72);overflow:hidden;backdrop-filter:blur(12px);">
+      <summary style="cursor:pointer;list-style:none;padding:16px 20px;font-size:15px;font-weight:600;color:hsl(var(--foreground));display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <span>全服 Web Push 测试</span>
+        <span style="font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">展开</span>
+      </summary>
+      <div style="padding:0 20px 20px;border-top:1px solid hsl(var(--border));">
+        <div style="margin-top:14px;padding:12px 14px;border-radius:14px;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.1);font-size:13px;line-height:1.55;font-weight:600;color:hsl(var(--foreground));">
+          请确保你已在<strong>手机 PWA（主屏幕版）</strong>中点击了「开启推送提醒」，否则数据库里没有你的订阅数据。
+        </div>
+        <p style="margin:12px 0 12px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
+          点击按钮后，服务端会从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并向每台设备发送测试通知。需在 Vercel 配置 VAPID 密钥、<code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>（仅服务端）及 <code style="font-size:11px;">SUPABASE_URL</code> / <code style="font-size:11px;">VITE_SUPABASE_URL</code>。
+        </p>
+        <button id="push-test-btn" type="button" style="height:40px;padding:0 20px;border:1px solid hsl(var(--border));border-radius:999px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:500;cursor:pointer;font-size:14px;">向所有订阅设备发送测试</button>
+        <p id="push-test-msg" style="margin:10px 0 0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
+      </div>
+    </details>
+    <div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:20px;background:rgba(15,15,20,0.38);backdrop-filter:blur(6px);">
+      <div id="edit-modal-panel" style="width:100%;max-width:420px;border-radius:22px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.96);padding:22px 20px 20px;box-shadow:0 20px 50px rgba(0,0,0,0.12);">
+        <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:hsl(var(--foreground));letter-spacing:-0.02em;">编辑兑换码</h3>
+        <input type="hidden" id="edit-code-id" value="" />
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">兑换码文字
+          <input id="edit-code-text" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:15px;box-sizing:border-box;" />
+        </label>
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">过期时间
+          <input id="edit-expiry" type="datetime-local" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
+        </label>
+        <label style="display:block;margin-bottom:18px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">巡逻提醒范围（1天 / 3天 / 7天）
+          <select id="edit-reminder" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
+            <option value="">7 天内（默认）</option>
+            <option value="72">3 天内</option>
+            <option value="24">1 天内</option>
+          </select>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+          <button type="button" id="edit-cancel-btn" style="height:40px;padding:0 18px;border:1px solid hsl(var(--border));border-radius:999px;background:#fff;color:hsl(var(--foreground));font-weight:500;cursor:pointer;font-size:14px;">取消</button>
+          <button type="button" id="edit-save-btn" style="height:40px;padding:0 18px;border:none;border-radius:999px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:500;cursor:pointer;font-size:14px;">保存</button>
+        </div>
+      </div>
+    </div>
   </main>
 `
 
@@ -118,11 +162,19 @@ const aiStatus = document.getElementById('ai-status') as HTMLParagraphElement
 const pendingListWrap = document.getElementById('pending-list') as HTMLDivElement
 const pushTestBtn = document.getElementById('push-test-btn') as HTMLButtonElement | null
 const pushTestMsg = document.getElementById('push-test-msg') as HTMLParagraphElement | null
+const editModal = document.getElementById('edit-modal') as HTMLDivElement
+const editIdInput = document.getElementById('edit-code-id') as HTMLInputElement
+const editCodeTextInput = document.getElementById('edit-code-text') as HTMLInputElement
+const editExpiryInput = document.getElementById('edit-expiry') as HTMLInputElement
+const editReminderSelect = document.getElementById('edit-reminder') as HTMLSelectElement
+const editCancelBtn = document.getElementById('edit-cancel-btn') as HTMLButtonElement
+const editSaveBtn = document.getElementById('edit-save-btn') as HTMLButtonElement
 
 let currentPassword = localStorage.getItem(ADMIN_PASSWORD_KEY) ?? ''
 let currentImageBase64 = ''
 let showExpired = false
 let cachedExpiredRows: Awaited<ReturnType<typeof listCodes>> = []
+let cachedActiveRows: Awaited<ReturnType<typeof listCodes>> = []
 let pendingItems: Array<{
   id: string
   gameName: string
@@ -198,14 +250,53 @@ function renderPendingList() {
         <div style="margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-weight:700;">${item.codeText || '(未识别到兑换码)'}</div>
         <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">钻石：${item.diamondReward || '无'} / 其他：${item.otherReward || '无'}</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" data-action="copy-pending" data-id="${item.id}" style="border:1px solid hsl(var(--border));background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;">${item.copied ? '已复制 ✅' : '一键复制'}</button>
-          <button type="button" data-action="approve-pending" data-id="${item.id}" style="border:0;background:hsl(var(--primary));color:white;border-radius:10px;padding:6px 10px;cursor:pointer;font-weight:700;">一键上线</button>
-          <button type="button" data-action="discard-pending" data-id="${item.id}" style="border:1px solid hsl(var(--destructive)/0.4);background:#fff;color:hsl(var(--destructive));border-radius:10px;padding:6px 10px;cursor:pointer;">删除</button>
+          <button type="button" data-action="copy-pending" data-id="${item.id}" style="border:1px solid hsl(var(--border));background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">${item.copied ? '已复制 ✅' : '一键复制'}</button>
+          <button type="button" data-action="approve-pending" data-id="${item.id}" style="border:0;background:hsl(var(--primary));color:white;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">一键上线</button>
+          <button type="button" data-action="discard-pending" data-id="${item.id}" style="border:1px solid hsl(var(--destructive)/0.4);background:#fff;color:hsl(var(--destructive));border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">删除</button>
         </div>
       </div>
     `,
     )
     .join('')
+}
+
+function toDatetimeLocalValue(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function parseCodeReminderSelect(value: string): number | null {
+  if (value === '24' || value === '72' || value === '168') return Number(value)
+  return null
+}
+
+function patrolScopeLabel(code: { reminderHours?: number | null }): string {
+  const h = code.reminderHours
+  if (h === 24) return '巡逻自 1 天内起'
+  if (h === 72) return '巡逻自 3 天内起'
+  return '巡逻自 7 天内起（默认）'
+}
+
+function openEditModal(id: number) {
+  const code = cachedActiveRows.find((c) => c.id === id)
+  if (!code) return
+  editIdInput.value = String(id)
+  editCodeTextInput.value = code.codeText
+  editExpiryInput.value = toDatetimeLocalValue(code.expiryAt)
+  const rh = code.reminderHours
+  if (rh === 24 || rh === 72) {
+    editReminderSelect.value = String(rh)
+  } else {
+    editReminderSelect.value = ''
+  }
+  editModal.style.display = 'flex'
+}
+
+function closeEditModal() {
+  editModal.style.display = 'none'
 }
 
 function diamondSvg() {
@@ -222,6 +313,7 @@ async function refreshList() {
     const now = Date.now()
     const activeRows = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
     cachedExpiredRows = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
+    cachedActiveRows = activeRows
 
     expiredTitle.textContent = `查看已过期的兑换码 (${cachedExpiredRows.length})`
 
@@ -229,32 +321,33 @@ async function refreshList() {
       .slice(0, 20)
       .map(
         (code) => `
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));">
           <div style="min-width:0;flex:1;">
-            <div style="font-weight:800;">
+            <div style="font-weight:600;">
               ${code.gameName} - <code>${code.codeText}</code>
             </div>
-            <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">
+            <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
               过期: ${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '永久'}
+              <br/>${patrolScopeLabel(code)}
               ${
                 code.diamondReward
-                  ? ` / ${diamondSvg()}${code.diamondReward} 钻石`
+                  ? `<br/>${diamondSvg()}${code.diamondReward} 钻石`
                   : code.otherReward
-                    ? ` / ${code.otherReward}`
+                    ? `<br/>${code.otherReward}`
                     : code.rewardDesc
-                      ? ` / ${code.rewardDesc}`
+                      ? `<br/>${code.rewardDesc}`
                       : ''
               }
             </div>
           </div>
-          <button
-            type="button"
-            data-action="delete"
-            data-id="${code.id}"
-            style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--destructive)/0.35);background:transparent;color:hsl(var(--destructive));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
-          >
-            删除
-          </button>
+          <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <button type="button" data-action="edit" data-id="${code.id}" style="border:1px solid hsl(var(--border));background:#fff;color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;">
+              编辑
+            </button>
+            <button type="button" data-action="delete" data-id="${code.id}" style="border:1px solid rgba(225,29,72,0.35);background:#fff;color:hsl(var(--destructive));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;">
+              删除
+            </button>
+          </div>
         </div>
       `,
       )
@@ -289,7 +382,7 @@ function renderExpiredList() {
           type="button"
           data-action="delete"
           data-id="${code.id}"
-          style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--destructive)/0.35);background:transparent;color:hsl(var(--destructive));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+          style="flex:0 0 auto;align-self:flex-start;border:1px solid rgba(225,29,72,0.35);background:#fff;color:hsl(var(--destructive));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
         >
           删除
         </button>
@@ -331,7 +424,7 @@ async function refreshSubmissions() {
               data-action="toggle-read"
               data-id="${item.id}"
               data-is-read="${item.isRead ? '1' : '0'}"
-              style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--border));background:white;color:hsl(var(--foreground));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+              style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--border));background:white;color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
             >
               ${item.isRead ? '取消已阅' : '已阅'}
             </button>
@@ -342,7 +435,7 @@ async function refreshSubmissions() {
                     data-action="toggle-featured"
                     data-id="${item.id}"
                     data-is-featured="${item.isFeatured ? '1' : '0'}"
-                    style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--accent)/0.45);background:${item.isFeatured ? 'hsl(var(--accent)/0.2)' : 'white'};color:hsl(var(--foreground));border-radius:12px;padding:8px 10px;cursor:pointer;font-weight:700;"
+                    style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--accent)/0.45);background:${item.isFeatured ? 'hsl(var(--accent)/0.2)' : 'white'};color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
                   >
                     ${item.isFeatured ? '取消精选' : '精选展示'}
                   </button>`
@@ -375,6 +468,8 @@ form.addEventListener('submit', async (event) => {
     const diamondReward = String(data.get('diamondReward') ?? '').trim()
     const otherReward = String(data.get('otherReward') ?? '').trim()
 
+    const reminderHours = parseCodeReminderSelect(String(data.get('codeReminder') ?? ''))
+
     await addCode({
       password: getAdminPassword(),
       gameName: String(data.get('gameName') ?? ''),
@@ -384,6 +479,7 @@ form.addEventListener('submit', async (event) => {
       otherReward: otherReward || undefined,
       expiryAt: data.get('expiryAt') ? new Date(String(data.get('expiryAt'))).toISOString() : undefined,
       source: String(data.get('source') ?? ''),
+      reminderHours,
     })
     status.textContent = '保存成功'
     status.style.color = '#15803d'
@@ -438,9 +534,15 @@ const handleDeleteClick = async (btn: HTMLButtonElement) => {
 
 listActiveWrap.addEventListener('click', async (e) => {
   const target = e.target as HTMLElement | null
-  const btn = target?.closest('button[data-action="delete"]') as HTMLButtonElement | null
-  if (!btn) return
-  await handleDeleteClick(btn)
+  const editBtn = target?.closest('button[data-action="edit"]') as HTMLButtonElement | null
+  if (editBtn) {
+    const id = Number(editBtn.getAttribute('data-id') ?? 0)
+    if (id) openEditModal(id)
+    return
+  }
+  const delBtn = target?.closest('button[data-action="delete"]') as HTMLButtonElement | null
+  if (!delBtn) return
+  await handleDeleteClick(delBtn)
 })
 
 listExpiredWrap.addEventListener('click', async (e) => {
@@ -718,6 +820,61 @@ pendingListWrap.addEventListener('click', async (e) => {
       status.style.color = '#e11d48'
     }
   }
+})
+
+editCancelBtn.addEventListener('click', () => closeEditModal())
+
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) closeEditModal()
+})
+
+editSaveBtn.addEventListener('click', async () => {
+  const id = Number(editIdInput.value)
+  if (!id) return
+  const password = getAdminPassword()
+  if (!password.trim()) {
+    status.textContent = '请输入管理员密码后再保存'
+    status.style.color = '#e11d48'
+    return
+  }
+  const codeText = editCodeTextInput.value.trim()
+  if (!codeText) {
+    status.textContent = '兑换码不能为空'
+    status.style.color = '#e11d48'
+    return
+  }
+  const expiryVal = editExpiryInput.value.trim()
+  const expiryAt = expiryVal ? new Date(expiryVal).toISOString() : null
+  const reminderHours = parseCodeReminderSelect(editReminderSelect.value)
+
+  status.textContent = '保存中…'
+  status.style.color = 'hsl(var(--muted-foreground))'
+  try {
+    await updateCode({
+      password,
+      id,
+      codeText,
+      expiryAt,
+      reminderHours,
+    })
+    persistPassword(password)
+    status.textContent = '已保存修改'
+    status.style.color = '#15803d'
+    closeEditModal()
+    await refreshList()
+  } catch (err) {
+    if (isAuthError(err)) {
+      clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
+      closeEditModal()
+      return
+    }
+    status.textContent = err instanceof Error ? err.message : '保存失败'
+    status.style.color = '#e11d48'
+  }
+})
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && editModal.style.display === 'flex') closeEditModal()
 })
 
 pushTestBtn?.addEventListener('click', async () => {

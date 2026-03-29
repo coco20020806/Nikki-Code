@@ -49,13 +49,10 @@ self.addEventListener('push', (event) => {
 
       const badgeP = (async () => {
         if (typeof navigator === 'undefined' || !navigator.setAppBadge) {
-          console.log('[NikkiCode SW] push: 无 setAppBadge，跳过角标')
           return
         }
-        console.log('[NikkiCode SW] push: 调用前 → navigator.setAppBadge', badgeCount)
         try {
           await navigator.setAppBadge(badgeCount)
-          console.log('[NikkiCode SW] push: 调用后 → setAppBadge 已完成')
         } catch (error) {
           console.error('[NikkiCode SW] push: setAppBadge 失败', error)
         }

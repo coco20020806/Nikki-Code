@@ -3,7 +3,31 @@ import type { Code } from '@/types/code'
 
 const PREFS_KEY = 'nikki_preferences_v1'
 const CLAIMED_KEY = 'nikkicodes_claimed'
-const PUSH_REMINDER_OPTIONS = [1, 6, 12, 24] as const
+
+/** 与 Cron 每日巡逻一致：24 / 72 / 168 小时 */
+const PATROL_TIER_HOURS = [24, 72, 168] as const
+
+function normalizeUserPushCap(h: number): number {
+  if (h === 24 || h === 72 || h === 168) return h
+  if (h === 1 || h === 6 || h === 12) return 24
+  return 168
+}
+
+function codeReminderCap(raw: number | null | undefined): number {
+  if (raw == null) return 168
+  if ((PATROL_TIER_HOURS as readonly number[]).includes(raw)) return raw
+  return 168
+}
+
+/** 是否在「会触发任一档巡逻提醒」的窗口内（用户 cap ∩ 码 cap） */
+function isInPatrolWindow(hoursLeft: number, userCap: number, codeCap: number): boolean {
+  const cap = Math.min(userCap, codeCap)
+  for (const T of PATROL_TIER_HOURS) {
+    if (T > cap) continue
+    if (hoursLeft > 0 && hoursLeft <= T) return true
+  }
+  return false
+}
 
 export function parseExpiryMsForBadge(expiryAt?: string): number | null {
   if (!expiryAt) return null
@@ -22,7 +46,7 @@ export type UrgentBadgePrefs = {
 
 export function readUrgentBadgePrefsFromStorage(): Omit<UrgentBadgePrefs, 'claimedIds'> & { claimedIds: Set<number> } {
   let preferredGames = ['无限暖暖', '闪耀暖暖']
-  let pushReminderHours = 24
+  let pushReminderHours = 168
   let highValueOnly = false
   try {
     const raw = localStorage.getItem(PREFS_KEY)
@@ -33,8 +57,8 @@ export function readUrgentBadgePrefsFromStorage(): Omit<UrgentBadgePrefs, 'claim
         highValueOnly?: boolean
       }
       if (Array.isArray(p.preferredGames)) preferredGames = p.preferredGames
-      if (typeof p.pushReminderHours === 'number' && (PUSH_REMINDER_OPTIONS as readonly number[]).includes(p.pushReminderHours)) {
-        pushReminderHours = p.pushReminderHours
+      if (typeof p.pushReminderHours === 'number') {
+        pushReminderHours = normalizeUserPushCap(p.pushReminderHours)
       }
       if (typeof p.highValueOnly === 'boolean') highValueOnly = p.highValueOnly
     }
@@ -57,8 +81,8 @@ export function readUrgentBadgePrefsFromStorage(): Omit<UrgentBadgePrefs, 'claim
 }
 
 /**
- * 与首页「未领取」列表过滤一致：关注游戏、高价值、未过期、未标记已领取，
- * 且剩余时间在 (0, pushReminderHours] 内（与 Cron 阈值一致）。
+ * 与 Cron 每日巡逻一致：关注游戏、高价值、未过期、未领取，
+ * 且剩余时间落在用户「到期提醒」偏好与码表提醒上限的交集巡逻窗口内。
  */
 export function countUrgentUnclaimedFromList(
   codes: Code[],
@@ -73,7 +97,8 @@ export function countUrgentUnclaimedFromList(
     if (expiryMs === null || expiryMs <= nowMs) continue
     if (opts.claimedIds.has(item.id)) continue
     const hoursLeft = (expiryMs - nowMs) / (1000 * 3600)
-    if (hoursLeft > 0 && hoursLeft <= opts.pushReminderHours) n += 1
+    const codeCap = codeReminderCap(item.reminderHours ?? null)
+    if (isInPatrolWindow(hoursLeft, opts.pushReminderHours, codeCap)) n += 1
   }
   return n
 }

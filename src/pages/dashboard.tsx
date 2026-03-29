@@ -30,7 +30,19 @@ import type { Code } from '@/types/code'
 
 const GAME_FILTERS = ['未领取', '无限暖暖', '闪耀暖暖']
 const STORAGE_KEY = 'nikki_preferences_v1'
-const PUSH_REMINDER_OPTIONS = [1, 6, 12, 24] as const
+
+/** 与每日巡逻 Cron 一致：168=7天档起，72=3天档起，24=1天档起 */
+const PUSH_REMINDER_PRESETS = [
+  { value: 168, label: '到期前 7 天内（推荐，配合每日巡逻）' },
+  { value: 72, label: '到期前 3 天内起' },
+  { value: 24, label: '到期前 1 天内起' },
+] as const
+
+function normalizeStoredPushReminderHours(h: number): number {
+  if (h === 24 || h === 72 || h === 168) return h
+  if (h === 1 || h === 6 || h === 12) return 24
+  return 168
+}
 
 function parseExpiryMs(expiryAt?: string): number | null {
   if (!expiryAt) return null
@@ -58,7 +70,7 @@ export default function Dashboard() {
   const [featuredImages, setFeaturedImages] = useState<FeaturedImage[]>([])
   const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
   const [warningThresholdHours, setWarningThresholdHours] = useState(24)
-  const [pushReminderHours, setPushReminderHours] = useState<number>(24)
+  const [pushReminderHours, setPushReminderHours] = useState<number>(168)
   const [highValueOnly, setHighValueOnly] = useState(false)
   const [codes, setCodes] = useState<Code[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,8 +90,8 @@ export default function Dashboard() {
       }
       if (Array.isArray(parsed.preferredGames)) setPreferredGames(parsed.preferredGames)
       if (typeof parsed.warningThresholdHours === 'number') setWarningThresholdHours(parsed.warningThresholdHours)
-      if (typeof parsed.pushReminderHours === 'number' && (PUSH_REMINDER_OPTIONS as readonly number[]).includes(parsed.pushReminderHours)) {
-        setPushReminderHours(parsed.pushReminderHours)
+      if (typeof parsed.pushReminderHours === 'number') {
+        setPushReminderHours(normalizeStoredPushReminderHours(parsed.pushReminderHours))
       }
       if (typeof parsed.highValueOnly === 'boolean') setHighValueOnly(parsed.highValueOnly)
     } catch {
@@ -261,11 +273,15 @@ export default function Dashboard() {
     setUploadingPostcard(true)
     try {
       await submitImageFeeding(postcardFile)
-      toast({ title: '投喂成功！作者已收到你的能量明信片 💖' })
+      toast({
+        title: '明信片已送达 ✨',
+        description: '你的心意作者都收到啦，愿搭配之力与你同在～',
+      })
       setPostcardFile(null)
       setPostcardPreview('')
       setSupportOpen(false)
     } catch (err) {
+      console.error('[handleSubmitPostcard] 投喂图片上传失败，完整错误:', err)
       const message = err instanceof Error ? err.message : '上传失败'
       toast({ title: message, variant: 'destructive' })
     } finally {
@@ -314,29 +330,14 @@ export default function Dashboard() {
           <Button
             onClick={handleEnablePush}
             disabled={pushStatus === 'granted' || pushStatus === 'unsupported'}
-            className={`rounded-2xl px-6 py-3 ${
+            className={`rounded-full px-6 py-3 font-medium shadow-sm transition-all active:scale-[0.98] ${
               pushStatus === 'granted'
-                ? 'cursor-default bg-green-100 text-green-700'
-                : ''
+                ? 'cursor-default border border-emerald-200/80 bg-emerald-50 text-emerald-800'
+                : 'bg-foreground text-background hover:opacity-90'
             }`}
           >
             <Bell className="h-5 w-5" />
             {pushStatus === 'granted' ? '推送已开启 ✓' : pushStatus === 'unsupported' ? '您的浏览器不支持推送' : '开启推送提醒'}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-2xl border-2 border-dashed border-primary/50 px-5 py-2 text-sm font-bold text-primary hover:bg-primary/5"
-            onClick={() => {
-              if (navigator.setAppBadge) {
-                void navigator.setAppBadge(5).catch(() => {})
-                toast({ title: '已请求角标数字 5', description: '请返回主屏幕查看 PWA 图标是否出现红点/数字。' })
-              } else {
-                toast({ title: '当前环境不支持 App Badge', variant: 'destructive' })
-              }
-            }}
-          >
-            测试红点功能
           </Button>
         </div>
       </div>
@@ -346,10 +347,10 @@ export default function Dashboard() {
           <button
             key={game}
             onClick={() => setSelectedGame(game)}
-            className={`rounded-full px-5 py-2.5 text-sm font-bold whitespace-nowrap transition-all duration-300 ${
+            className={`rounded-full border px-5 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-300 active:scale-[0.98] ${
               selectedGame === game
-                ? 'bg-foreground text-background -translate-y-0.5 shadow-md shadow-foreground/10'
-                : 'border-border bg-white text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
+                ? 'border-transparent bg-foreground text-background shadow-sm shadow-foreground/10'
+                : 'border-border/80 bg-white/90 text-muted-foreground hover:border-zinc-300 hover:bg-white'
             }`}
           >
             {game}
@@ -452,13 +453,13 @@ export default function Dashboard() {
               <div>
                 <p className="mb-2 font-bold">到期提醒时机</p>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  在到期前约选定小时数通过 PWA 推送提醒一次（需已开启推送）。更改后会同步到服务器。
+                  与每日巡逻一致：服务器在 7 天 / 3 天 / 1 天到期前各档最多提醒一次；此处选择你愿意接收的最早一档（越宽越早收到）。需已开启推送，更改后会同步到服务器。
                 </p>
                 <select
                   className="h-10 w-full rounded-xl border border-input bg-white px-3"
                   value={pushReminderHours}
                   onChange={async (e) => {
-                    const v = Number(e.target.value)
+                    const v = Number(e.target.value) as 24 | 72 | 168
                     setPushReminderHours(v)
                     try {
                       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -472,16 +473,16 @@ export default function Dashboard() {
                         return
                       }
                       await updatePushPreference(sub.endpoint, v)
-                      toast({ title: '到期提醒时机已同步' })
+                      toast({ title: '到期提醒偏好已同步' })
                     } catch (err) {
                       const message = err instanceof Error ? err.message : '同步失败'
                       toast({ title: message, variant: 'destructive' })
                     }
                   }}
                 >
-                  {PUSH_REMINDER_OPTIONS.map((h) => (
-                    <option key={h} value={h}>
-                      到期前 {h} 小时
+                  {PUSH_REMINDER_PRESETS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
                     </option>
                   ))}
                 </select>

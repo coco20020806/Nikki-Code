@@ -27,7 +27,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
  * 请求通知权限、确保 Push 订阅并写入 Supabase push_subscriptions。
  * @returns 是否已具备可用的推送订阅（权限通过且订阅成功）
  */
-export async function subscribePushAndPersist(reminderHours = 24): Promise<boolean> {
+export async function subscribePushAndPersist(reminderHours = 168): Promise<boolean> {
   warnIfVapidKeysMissingInClient()
 
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {

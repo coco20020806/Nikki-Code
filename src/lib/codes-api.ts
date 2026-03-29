@@ -9,6 +9,7 @@ type CodeRow = {
   diamond_reward: string | null
   other_reward: string | null
   expiry_at: string | null
+  reminder_hours: number | null
   is_high_value: boolean
   is_invalid: boolean
   source: string | null
@@ -43,6 +44,7 @@ function mapRowToCode(row: CodeRow): Code {
     rewardDesc:
       (row.reward_desc ?? undefined) && (!otherReward || !otherReward.trim()) ? row.reward_desc ?? undefined : undefined,
     expiryAt: row.expiry_at ?? undefined,
+    reminderHours: row.reminder_hours ?? undefined,
     isHighValue: row.is_high_value,
     isInvalid: row.is_invalid,
     source: row.source ?? undefined,
@@ -63,7 +65,9 @@ export async function listCodes(game?: string, opts?: { includeInvalid?: boolean
   const includeInvalid = opts?.includeInvalid ?? false
   let query = supabase
     .from('codes')
-    .select('id,game_name,code_text,reward_desc,diamond_reward,other_reward,expiry_at,is_high_value,is_invalid,source')
+    .select(
+      'id,game_name,code_text,reward_desc,diamond_reward,other_reward,expiry_at,reminder_hours,is_high_value,is_invalid,source',
+    )
     .order('is_high_value', { ascending: false })
     .order('expiry_at', { ascending: true, nullsFirst: false })
 
@@ -84,6 +88,8 @@ export type AddCodeInput = {
   expiryAt?: string
   source?: string
   isHighValue?: boolean // 兼容旧逻辑：由 diamondReward 自动推断
+  /** 24 / 72 / 168，与巡逻档位一致；未传则 null（等价 7 天起） */
+  reminderHours?: number | null
 }
 
 export async function addCode(input: AddCodeInput): Promise<void> {
@@ -93,6 +99,9 @@ export async function addCode(input: AddCodeInput): Promise<void> {
   const other = (input.otherReward ?? '').trim()
   const isHighValue = Boolean(diamond) // 规则：有钻石就是高价值
 
+  const rh =
+    input.reminderHours != null && [24, 72, 168].includes(input.reminderHours) ? input.reminderHours : null
+
   const { error } = await supabase.from('codes').insert({
     game_name: input.gameName,
     code_text: input.codeText.toUpperCase(),
@@ -101,10 +110,37 @@ export async function addCode(input: AddCodeInput): Promise<void> {
     diamond_reward: diamond || null,
     other_reward: other || null,
     expiry_at: input.expiryAt || null,
+    reminder_hours: rh,
     is_high_value: isHighValue,
     is_invalid: false,
     source: input.source || null,
   })
+
+  if (error) throw new Error(error.message)
+}
+
+export type UpdateCodeInput = {
+  password: string
+  id: number
+  codeText: string
+  expiryAt?: string | null
+  reminderHours?: number | null
+}
+
+export async function updateCode(input: UpdateCodeInput): Promise<void> {
+  requireAdminPassword(input.password)
+
+  const ct = input.codeText.trim()
+  if (!ct) throw new Error('兑换码不能为空')
+
+  const patch: { code_text: string; expiry_at?: string | null } = {
+    code_text: ct.toUpperCase(),
+  }
+  if (input.expiryAt !== undefined) {
+    patch.expiry_at = input.expiryAt || null
+  }
+
+  const { error } = await supabase.from('codes').update(patch).eq('id', input.id)
 
   if (error) throw new Error(error.message)
 }
@@ -139,15 +175,26 @@ export async function submitFeedback(content: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/** 去掉路径，仅保留一段文件名；替换路径/URL 非法与控制字符，避免重名用外层 Date.now() 前缀 */
+function safeStorageFileName(originalName: string): string {
+  const base = originalName.replace(/^.*[/\\]/, '').trim() || 'image'
+  const cleaned = base.replace(/[\x00-\x1f"#*:<>?|]/g, '_').replace(/^\.+/, '')
+  return cleaned || 'image.jpg'
+}
+
 export async function submitImageFeeding(file: File): Promise<void> {
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-  const filePath = `feedings/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const safeName = safeStorageFileName(file.name)
+  const filePath = `feedings/${Date.now()}-${safeName}`
 
   const { error: uploadError } = await supabase.storage.from('submissions').upload(filePath, file, {
     upsert: false,
     contentType: file.type || 'image/jpeg',
   })
-  if (uploadError) throw new Error(uploadError.message)
+  if (uploadError) {
+    console.error('[submitImageFeeding] Storage 上传失败，完整 error:', uploadError)
+    console.error('[submitImageFeeding] error 序列化:', JSON.stringify(uploadError, null, 2))
+    throw new Error(uploadError.message)
+  }
 
   const { data } = supabase.storage.from('submissions').getPublicUrl(filePath)
   const { error } = await supabase.from('submissions').insert({
@@ -157,7 +204,11 @@ export async function submitImageFeeding(file: File): Promise<void> {
     is_read: false,
     is_featured: false,
   })
-  if (error) throw new Error(error.message)
+  if (error) {
+    console.error('[submitImageFeeding] submissions 表插入失败，完整 error:', error)
+    console.error('[submitImageFeeding] error 序列化:', JSON.stringify(error, null, 2))
+    throw new Error(error.message)
+  }
 }
 
 type SubmissionRow = {
@@ -213,7 +264,7 @@ function pushApiUrl(path: string): string {
   return new URL(path, `${window.location.origin}${import.meta.env.BASE_URL || '/'}`).toString()
 }
 
-const ALLOWED_PUSH_REMINDER_HOURS = new Set([1, 6, 12, 24])
+const ALLOWED_PUSH_REMINDER_HOURS = new Set([24, 72, 168])
 
 /** 将当前设备的 reminder_hours 同步到 Supabase（需已存在 push_subscriptions 记录） */
 export async function updatePushPreference(endpoint: string, reminderHours: number): Promise<void> {
@@ -240,7 +291,7 @@ export async function upsertPushSubscription(
   const auth = sub.keys?.auth
   if (!endpoint || !p256dh || !auth) throw new Error('推送订阅数据不完整')
 
-  const reminderHours = options?.reminderHours ?? 24
+  const reminderHours = options?.reminderHours ?? 168
   if (!ALLOWED_PUSH_REMINDER_HOURS.has(reminderHours)) throw new Error('reminder_hours 无效')
 
   const row = {
