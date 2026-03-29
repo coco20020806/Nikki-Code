@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Heart,
+  HelpCircle,
   Loader2,
   MessageCircleMore,
   MessageSquare,
@@ -62,6 +63,7 @@ export default function Dashboard() {
   const [selectedGame, setSelectedGame] = useState<string>('未领取')
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'unsupported'>('default')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [supportOpen, setSupportOpen] = useState(false)
   const [supportTab, setSupportTab] = useState<'coffee' | 'postcard'>('coffee')
@@ -317,7 +319,7 @@ export default function Dashboard() {
     void listFeaturedImages().then(setFeaturedImages).catch(() => {})
   }, [selectedGame, toast])
 
-  const pullRefreshEnabled = !settingsOpen && !feedbackOpen && !supportOpen
+  const pullRefreshEnabled = !settingsOpen && !guideOpen && !feedbackOpen && !supportOpen
   const { containerRef, indicatorHeight, showSpinner } = usePullToRefresh({
     enabled: pullRefreshEnabled,
     onRefresh: handlePullRefresh,
@@ -342,6 +344,15 @@ export default function Dashboard() {
           >
             <Heart className="h-4 w-4" />
             <span className="hidden sm:inline">赞助/投喂</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            aria-label="使用指南"
+            className="flex items-center gap-2 rounded-xl border border-zinc-300/70 bg-white/90 px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition-all hover:border-primary/40 hover:bg-white hover:text-foreground active:scale-95"
+          >
+            <HelpCircle className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">指南</span>
           </button>
           <button
             type="button"
@@ -446,6 +457,122 @@ export default function Dashboard() {
           </AnimatePresence>
         </motion.div>
       )}
+
+      {guideOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-md sm:items-center sm:p-4 sm:bg-black/35"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guide-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setGuideOpen(false)
+          }}
+        >
+          <div
+            className="glass-card flex max-h-[min(92dvh,720px)] w-full max-w-lg flex-col rounded-t-[1.75rem] border border-white/60 bg-white/85 shadow-2xl backdrop-blur-xl sm:max-h-[min(88dvh,680px)] sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-border/50 px-5 py-4 sm:px-6">
+              <h2 id="guide-title" className="font-display text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                NikkiCode 使用指南
+              </h2>
+              <button
+                type="button"
+                onClick={() => setGuideOpen(false)}
+                className="rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+              <p className="mb-6 text-[15px] leading-relaxed text-muted-foreground">
+                NikkiCode 是你的兑换码贴身管家，帮你守护每一份星光福利。
+              </p>
+
+              <section className="mb-6">
+                <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-foreground">
+                  <span aria-hidden>✨</span>
+                  核心功能
+                </h3>
+                <ul className="space-y-2.5 text-[15px] leading-relaxed text-foreground/90">
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">高亮兑换码</span>
+                      ：可设置时间窗口标记即将过期兑换码高亮。
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">智能到期提醒</span>
+                      ：在设置中可设置提醒时间，在对应时间内有未兑换兑换码将推送。
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">持久化红点</span>
+                      ：只要还有没领的码，红点将持续存在。
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">暖心投喂</span>
+                      ：支持投喂明信片功能，和开发者分享你的精美搭配与快乐。
+                    </span>
+                  </li>
+                </ul>
+              </section>
+
+              <section className="mb-6">
+                <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-foreground">
+                  <span aria-hidden>🚀</span>
+                  快速上手
+                </h3>
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="mb-2 text-sm font-semibold text-foreground">🍎 iOS 用户（Safari）</p>
+                    <p className="text-[15px] leading-relaxed text-muted-foreground">
+                      点击底部「分享」按钮 →「添加到主屏幕」→ 启动并允许通知。
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
+                    <p className="mb-2 text-sm font-semibold text-foreground">🤖 安卓用户（Chrome / Edge）</p>
+                    <p className="text-[15px] leading-relaxed text-muted-foreground">
+                      点击右上角「三个点」→「安装应用」或「添加到主屏幕」。
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-foreground">
+                  <span aria-hidden>💡</span>
+                  小贴士
+                </h3>
+                <ul className="space-y-2.5 text-[15px] leading-relaxed text-foreground/90">
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">刷新数据</span>
+                      ：在主界面向下拉动即可同步；如果下拉无法刷新，请从后台关闭并重启 APP。
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">消除红点</span>
+                      ：将兑换码标记为「已兑换」，红点数字将自动递减。
+                    </span>
+                  </li>
+                </ul>
+              </section>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {settingsOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
