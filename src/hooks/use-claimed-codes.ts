@@ -21,6 +21,7 @@ export function useClaimedCodes() {
       const next = new Set(prev)
       next.add(id)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)))
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
       return next
     })
   }
@@ -30,6 +31,7 @@ export function useClaimedCodes() {
       const next = new Set(prev)
       next.delete(id)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)))
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
       return next
     })
   }

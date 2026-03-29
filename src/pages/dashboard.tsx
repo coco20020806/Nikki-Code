@@ -97,6 +97,7 @@ export default function Dashboard() {
         highValueOnly,
       }),
     )
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
   }, [preferredGames, warningThresholdHours, pushReminderHours, highValueOnly])
 
   useEffect(() => {

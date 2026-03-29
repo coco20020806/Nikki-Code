@@ -91,6 +91,18 @@ function subscriptionLogLabel(endpoint: string): string {
   return endpoint.length > 72 ? `${endpoint.slice(0, 72)}…` : endpoint
 }
 
+/** 服务端可见：未过期且剩余时间在 (0, R] 内的兑换码数量（无「已领取」数据，与前端本地角标可能略有差异） */
+function countReminderWindowCodes(activeCodes: CodeRow[], nowMs: number, R: number): number {
+  let n = 0
+  for (const c of activeCodes) {
+    const ms = parseExpiryMs(c.expiry_at)
+    if (ms === null || ms <= nowMs) continue
+    const h = (ms - nowMs) / (1000 * 3600)
+    if (h > 0 && h <= R) n += 1
+  }
+  return n
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = (process.env.CRON_SECRET || '').trim()
   const auth = (req.headers.authorization || '').trim()
@@ -238,11 +250,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const aboutHours = Math.max(1, Math.round(hoursLeft))
+      const badgeCount = countReminderWindowCodes(activeCodes, now, R)
+      console.log(
+        `[cron-push] badgeCount=${badgeCount} (codes in 0<hours_left<=${R}h window, server-side; no per-user claimed state)`,
+      )
+
       const payload = buildStandardPushPayload({
         title: '兑换码即将过期',
         body: `快去领取！兑换码 ${code.code_text} 还有约 ${aboutHours} 小时就要过期了！`,
         url: '/',
-        badgeCount: 1,
+        badgeCount,
       })
 
       try {
