@@ -1,10 +1,21 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 
-type ToastItem = { id: number; title: string; description?: string; destructive?: boolean }
+type ToastItem = {
+  id: number
+  title: string
+  description?: string
+  destructive?: boolean
+  action?: { label: string; onClick: () => void }
+}
 
 type ToastContextType = {
   toasts: ToastItem[]
-  toast: (input: { title: string; description?: string; variant?: 'destructive' }) => void
+  toast: (input: {
+    title: string
+    description?: string
+    variant?: 'destructive'
+    action?: { label: string; onClick: () => void }
+  }) => void
   dismiss: (id: number) => void
 }
 
@@ -16,12 +27,24 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<ToastContextType>(
     () => ({
       toasts,
-      toast: ({ title, description, variant }) => {
+      toast: ({ title, description, variant, action }) => {
         const id = Date.now() + Math.floor(Math.random() * 1000)
-        setToasts((prev) => [{ id, title, description, destructive: variant === 'destructive' }, ...prev].slice(0, 3))
+        setToasts((prev) =>
+          [
+            {
+              id,
+              title,
+              description,
+              destructive: variant === 'destructive',
+              action,
+            },
+            ...prev,
+          ].slice(0, 3),
+        )
+        const duration = action ? 20000 : 2800
         window.setTimeout(() => {
           setToasts((prev) => prev.filter((item) => item.id !== id))
-        }, 2800)
+        }, duration)
       },
       dismiss: (id) => setToasts((prev) => prev.filter((item) => item.id !== id)),
     }),

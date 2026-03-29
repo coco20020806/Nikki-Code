@@ -14,9 +14,21 @@ export function Toaster() {
           }`}
         >
           <div className="flex items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-bold text-foreground">{item.title}</p>
               {item.description ? <p className="mt-1 text-sm text-muted-foreground">{item.description}</p> : null}
+              {item.action ? (
+                <button
+                  type="button"
+                  className="mt-3 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 active:scale-[0.98]"
+                  onClick={() => {
+                    item.action?.onClick()
+                    dismiss(item.id)
+                  }}
+                >
+                  {item.action.label}
+                </button>
+              ) : null}
             </div>
             <button
               type="button"

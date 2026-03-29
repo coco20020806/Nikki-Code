@@ -118,6 +118,12 @@ root.innerHTML = `
       <div id="edit-modal-panel" style="width:100%;max-width:420px;border-radius:22px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.96);padding:22px 20px 20px;box-shadow:0 20px 50px rgba(0,0,0,0.12);">
         <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:hsl(var(--foreground));letter-spacing:-0.02em;">编辑兑换码</h3>
         <input type="hidden" id="edit-code-id" value="" />
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">所属游戏
+          <select id="edit-game-name" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
+            <option value="无限暖暖">无限暖暖</option>
+            <option value="闪耀暖暖">闪耀暖暖</option>
+          </select>
+        </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">兑换码文字
           <input id="edit-code-text" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:15px;box-sizing:border-box;" />
         </label>
@@ -164,6 +170,7 @@ const pushTestBtn = document.getElementById('push-test-btn') as HTMLButtonElemen
 const pushTestMsg = document.getElementById('push-test-msg') as HTMLParagraphElement | null
 const editModal = document.getElementById('edit-modal') as HTMLDivElement
 const editIdInput = document.getElementById('edit-code-id') as HTMLInputElement
+const editGameNameSelect = document.getElementById('edit-game-name') as HTMLSelectElement
 const editCodeTextInput = document.getElementById('edit-code-text') as HTMLInputElement
 const editExpiryInput = document.getElementById('edit-expiry') as HTMLInputElement
 const editReminderSelect = document.getElementById('edit-reminder') as HTMLSelectElement
@@ -280,10 +287,15 @@ function patrolScopeLabel(code: { reminderHours?: number | null }): string {
   return '巡逻自 7 天内起（默认）'
 }
 
+const EDIT_GAME_OPTIONS = ['无限暖暖', '闪耀暖暖'] as const
+
 function openEditModal(id: number) {
   const code = cachedActiveRows.find((c) => c.id === id)
   if (!code) return
   editIdInput.value = String(id)
+  editGameNameSelect.value = (EDIT_GAME_OPTIONS as readonly string[]).includes(code.gameName)
+    ? code.gameName
+    : '无限暖暖'
   editCodeTextInput.value = code.codeText
   editExpiryInput.value = toDatetimeLocalValue(code.expiryAt)
   const rh = code.reminderHours
@@ -853,6 +865,7 @@ editSaveBtn.addEventListener('click', async () => {
     await updateCode({
       password,
       id,
+      gameName: editGameNameSelect.value,
       codeText,
       expiryAt,
       reminderHours,

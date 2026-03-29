@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
@@ -25,6 +25,11 @@ import {
   updatePushPreference,
   type FeaturedImage,
 } from '@/lib/codes-api'
+import { usePullToRefresh } from '@/hooks/use-pull-to-refresh'
+import {
+  activateWaitingServiceWorkerAndReload,
+  checkServiceWorkerUpdateAvailable,
+} from '@/lib/sw-update'
 import { isVapidPublicKeyConfigured, subscribePushAndPersist, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import type { Code } from '@/types/code'
 
@@ -289,6 +294,35 @@ export default function Dashboard() {
     }
   }
 
+  const handlePullRefresh = useCallback(async () => {
+    try {
+      const rows = await listCodes(selectedGame)
+      setCodes(rows)
+      setLoadError(null)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '加载失败'
+      toast({ title: '刷新失败', description: message, variant: 'destructive' })
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
+    }
+    const swNew = await checkServiceWorkerUpdateAvailable()
+    if (swNew) {
+      toast({
+        title: '发现新版本',
+        description: '点击更新以加载最新功能。',
+        action: { label: '更新', onClick: () => activateWaitingServiceWorkerAndReload() },
+      })
+    }
+    void listFeaturedImages().then(setFeaturedImages).catch(() => {})
+  }, [selectedGame, toast])
+
+  const pullRefreshEnabled = !settingsOpen && !feedbackOpen && !supportOpen
+  const { containerRef, indicatorHeight, showSpinner } = usePullToRefresh({
+    enabled: pullRefreshEnabled,
+    onRefresh: handlePullRefresh,
+  })
+
   return (
     <Layout
       rightSlot={
@@ -320,6 +354,18 @@ export default function Dashboard() {
         </div>
       }
     >
+      <div ref={containerRef} className="relative touch-pan-y">
+        <div
+          className="pointer-events-none flex justify-center overflow-hidden transition-[height] duration-300 ease-out"
+          style={{ height: indicatorHeight }}
+          aria-hidden
+        >
+          <Loader2
+            className={`mb-1 h-7 w-7 self-end text-primary ${showSpinner ? 'animate-spin' : ''}`}
+            style={{ opacity: indicatorHeight > 6 ? Math.min(1, indicatorHeight / 36) : 0 }}
+          />
+        </div>
+
       <div className="mb-10 flex flex-col justify-between gap-6 text-center sm:flex-row sm:items-end sm:text-left">
         <div>
           <h1 className="mb-4 font-display text-4xl font-extrabold text-foreground md:text-5xl">最新兑换码</h1>
@@ -644,6 +690,7 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+      </div>
     </Layout>
   )
 }

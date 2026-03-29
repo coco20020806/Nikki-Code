@@ -37,6 +37,9 @@
   #root {
     min-height: 100%;
   }
+  html {
+    overscroll-behavior-y: contain;
+  }
   body {
     margin: 0;
     background-color: hsl(var(--background));
@@ -44,6 +47,7 @@
     font-family: 'Quicksand', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: contain;
     background-image:
       radial-gradient(at top left, rgba(255, 230, 240, 0.5) 0%, transparent 50%),
       radial-gradient(at bottom right, rgba(230, 230, 255, 0.5) 0%, transparent 50%);

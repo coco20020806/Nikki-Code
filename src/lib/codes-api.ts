@@ -119,10 +119,13 @@ export async function addCode(input: AddCodeInput): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+const UPDATE_CODE_GAMES = ['无限暖暖', '闪耀暖暖'] as const
+
 export type UpdateCodeInput = {
   password: string
   id: number
   codeText: string
+  gameName: string
   expiryAt?: string | null
   reminderHours?: number | null
 }
@@ -133,11 +136,31 @@ export async function updateCode(input: UpdateCodeInput): Promise<void> {
   const ct = input.codeText.trim()
   if (!ct) throw new Error('兑换码不能为空')
 
-  const patch: { code_text: string; expiry_at?: string | null } = {
+  const gameName = input.gameName.trim()
+  if (!gameName) throw new Error('游戏名称不能为空')
+  if (!(UPDATE_CODE_GAMES as readonly string[]).includes(gameName)) {
+    throw new Error('游戏名称无效')
+  }
+
+  const patch: {
+    code_text: string
+    game_name: string
+    expiry_at?: string | null
+    reminder_hours?: number | null
+  } = {
     code_text: ct.toUpperCase(),
+    game_name: gameName,
   }
   if (input.expiryAt !== undefined) {
     patch.expiry_at = input.expiryAt || null
+  }
+  if (input.reminderHours !== undefined) {
+    patch.reminder_hours =
+      input.reminderHours === null
+        ? null
+        : [24, 72, 168].includes(input.reminderHours)
+          ? input.reminderHours
+          : null
   }
 
   const { error } = await supabase.from('codes').update(patch).eq('id', input.id)

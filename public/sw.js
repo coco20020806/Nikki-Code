@@ -1,6 +1,21 @@
 /* NikkiCode PWA — 处理推送并在系统层展示通知 */
-self.addEventListener('install', () => {
-  self.skipWaiting()
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    (async () => {
+      const hasActive = self.registration.active
+      if (!hasActive) {
+        await self.skipWaiting()
+        return
+      }
+      /* 已有在跑的 SW：新版本进入 waiting，由页面提示「发现新版本」后再 SKIP_WAITING */
+    })(),
+  )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    void self.skipWaiting()
+  }
 })
 
 self.addEventListener('activate', (event) => {
