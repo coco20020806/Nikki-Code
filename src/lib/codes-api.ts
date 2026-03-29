@@ -88,8 +88,6 @@ export type AddCodeInput = {
   expiryAt?: string
   source?: string
   isHighValue?: boolean // 兼容旧逻辑：由 diamondReward 自动推断
-  /** 24 / 72 / 168，与巡逻档位一致；未传则 null（等价 7 天起） */
-  reminderHours?: number | null
 }
 
 export async function addCode(input: AddCodeInput): Promise<void> {
@@ -99,9 +97,6 @@ export async function addCode(input: AddCodeInput): Promise<void> {
   const other = (input.otherReward ?? '').trim()
   const isHighValue = Boolean(diamond) // 规则：有钻石就是高价值
 
-  const rh =
-    input.reminderHours != null && [24, 72, 168].includes(input.reminderHours) ? input.reminderHours : null
-
   const { error } = await supabase.from('codes').insert({
     game_name: input.gameName,
     code_text: input.codeText.toUpperCase(),
@@ -110,7 +105,7 @@ export async function addCode(input: AddCodeInput): Promise<void> {
     diamond_reward: diamond || null,
     other_reward: other || null,
     expiry_at: input.expiryAt || null,
-    reminder_hours: rh,
+    reminder_hours: null,
     is_high_value: isHighValue,
     is_invalid: false,
     source: input.source || null,
@@ -119,15 +114,17 @@ export async function addCode(input: AddCodeInput): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-const UPDATE_CODE_GAMES = ['无限暖暖', '闪耀暖暖'] as const
+export type ReportType = 'FAKE_CODE' | 'REWARD_MISMATCH'
 
 export type UpdateCodeInput = {
   password: string
   id: number
   codeText: string
-  gameName: string
   expiryAt?: string | null
-  reminderHours?: number | null
+  diamondReward?: string
+  otherReward?: string
+  /** 对应库字段 is_invalid（软删除） */
+  isInvalid: boolean
 }
 
 export async function updateCode(input: UpdateCodeInput): Promise<void> {
@@ -136,36 +133,68 @@ export async function updateCode(input: UpdateCodeInput): Promise<void> {
   const ct = input.codeText.trim()
   if (!ct) throw new Error('兑换码不能为空')
 
-  const gameName = input.gameName.trim()
-  if (!gameName) throw new Error('游戏名称不能为空')
-  if (!(UPDATE_CODE_GAMES as readonly string[]).includes(gameName)) {
-    throw new Error('游戏名称无效')
-  }
+  const diamond = (input.diamondReward ?? '').trim()
+  const other = (input.otherReward ?? '').trim()
+  const isHighValue = Boolean(diamond)
 
-  const patch: {
-    code_text: string
-    game_name: string
-    expiry_at?: string | null
-    reminder_hours?: number | null
-  } = {
+  const patch: Record<string, unknown> = {
     code_text: ct.toUpperCase(),
-    game_name: gameName,
+    diamond_reward: diamond || null,
+    other_reward: other || null,
+    reward_desc: other || null,
+    is_high_value: isHighValue,
+    is_invalid: input.isInvalid,
   }
   if (input.expiryAt !== undefined) {
     patch.expiry_at = input.expiryAt || null
-  }
-  if (input.reminderHours !== undefined) {
-    patch.reminder_hours =
-      input.reminderHours === null
-        ? null
-        : [24, 72, 168].includes(input.reminderHours)
-          ? input.reminderHours
-          : null
   }
 
   const { error } = await supabase.from('codes').update(patch).eq('id', input.id)
 
   if (error) throw new Error(error.message)
+}
+
+const REPORT_TYPE_LABEL: Record<ReportType, string> = {
+  FAKE_CODE: '虚假码',
+  REWARD_MISMATCH: '奖励不符',
+}
+
+/** 管理页列表：附带 reports 聚合（需管理员密码；RLS 需允许读取 reports） */
+export type AdminCodeWithReports = Code & {
+  reportCount: number
+  reportTypeLabels: string[]
+}
+
+export async function fetchAdminCodesWithReports(password: string): Promise<AdminCodeWithReports[]> {
+  requireAdminPassword(password)
+
+  const [codes, reportsRes] = await Promise.all([
+    listCodes(),
+    supabase.from('reports').select('code_id, report_type'),
+  ])
+
+  if (reportsRes.error) throw new Error(reportsRes.error.message)
+
+  const byCode = new Map<number, ReportType[]>()
+  for (const raw of reportsRes.data ?? []) {
+    const row = raw as { code_id: number; report_type: string }
+    const cid = Number(row.code_id)
+    const rt = row.report_type as ReportType
+    if (rt !== 'FAKE_CODE' && rt !== 'REWARD_MISMATCH') continue
+    const arr = byCode.get(cid) ?? []
+    arr.push(rt)
+    byCode.set(cid, arr)
+  }
+
+  return codes.map((c) => {
+    const list = byCode.get(c.id) ?? []
+    const uniqTypes = [...new Set(list)]
+    return {
+      ...c,
+      reportCount: list.length,
+      reportTypeLabels: uniqTypes.map((t) => REPORT_TYPE_LABEL[t]),
+    }
+  })
 }
 
 export async function deleteCode(id: number, password: string): Promise<void> {
@@ -175,8 +204,6 @@ export async function deleteCode(id: number, password: string): Promise<void> {
   const { error } = await supabase.from('codes').update({ is_invalid: true }).eq('id', id)
   if (error) throw new Error(error.message)
 }
-
-export type ReportType = 'FAKE_CODE' | 'REWARD_MISMATCH'
 
 export async function reportIssue(codeId: number, reportType: ReportType): Promise<void> {
   const { error } = await supabase.from('reports').insert({

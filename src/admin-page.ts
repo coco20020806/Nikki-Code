@@ -2,8 +2,10 @@ import './index.css'
 import { registerNikkiServiceWorker } from '@/lib/register-sw'
 import { getPushTestApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import {
+  type AdminCodeWithReports,
   addCode,
   deleteCode,
+  fetchAdminCodesWithReports,
   listCodes,
   listSubmissions,
   setSubmissionFeatured,
@@ -66,13 +68,6 @@ root.innerHTML = `
         <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="expiryAt" type="datetime-local" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="source" placeholder="来源（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <label style="display:block;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">巡逻提醒范围（与用户推送偏好取交集；每日巡逻 7d/3d/1d 档）
-          <select name="codeReminder" class="mt-1.5 h-11 w-full rounded-xl border border-input bg-white px-4">
-            <option value="">7 天内（默认）</option>
-            <option value="72">3 天内</option>
-            <option value="24">1 天内</option>
-          </select>
-        </label>
         <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">保存到 Supabase</button>
       </form>
       <p id="status" style="margin-top:10px;"></p>
@@ -118,24 +113,21 @@ root.innerHTML = `
       <div id="edit-modal-panel" style="width:100%;max-width:420px;border-radius:22px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.96);padding:22px 20px 20px;box-shadow:0 20px 50px rgba(0,0,0,0.12);">
         <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:hsl(var(--foreground));letter-spacing:-0.02em;">编辑兑换码</h3>
         <input type="hidden" id="edit-code-id" value="" />
-        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">所属游戏
-          <select id="edit-game-name" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
-            <option value="无限暖暖">无限暖暖</option>
-            <option value="闪耀暖暖">闪耀暖暖</option>
-          </select>
-        </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">兑换码文字
           <input id="edit-code-text" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:15px;box-sizing:border-box;" />
+        </label>
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">钻石奖励（留空则低价值）
+          <input id="edit-diamond" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
+        </label>
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">其他奖励
+          <input id="edit-other" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
         </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">过期时间
           <input id="edit-expiry" type="datetime-local" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
         </label>
-        <label style="display:block;margin-bottom:18px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">巡逻提醒范围（1天 / 3天 / 7天）
-          <select id="edit-reminder" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
-            <option value="">7 天内（默认）</option>
-            <option value="72">3 天内</option>
-            <option value="24">1 天内</option>
-          </select>
+        <label style="display:flex;align-items:center;gap:10px;margin-bottom:18px;font-size:13px;font-weight:500;color:hsl(var(--foreground));cursor:pointer;">
+          <input id="edit-invalid" type="checkbox" style="width:18px;height:18px;accent-color:hsl(var(--destructive));" />
+          标记为已失效（软删除）
         </label>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
           <button type="button" id="edit-cancel-btn" style="height:40px;padding:0 18px;border:1px solid hsl(var(--border));border-radius:999px;background:#fff;color:hsl(var(--foreground));font-weight:500;cursor:pointer;font-size:14px;">取消</button>
@@ -170,18 +162,19 @@ const pushTestBtn = document.getElementById('push-test-btn') as HTMLButtonElemen
 const pushTestMsg = document.getElementById('push-test-msg') as HTMLParagraphElement | null
 const editModal = document.getElementById('edit-modal') as HTMLDivElement
 const editIdInput = document.getElementById('edit-code-id') as HTMLInputElement
-const editGameNameSelect = document.getElementById('edit-game-name') as HTMLSelectElement
 const editCodeTextInput = document.getElementById('edit-code-text') as HTMLInputElement
+const editDiamondInput = document.getElementById('edit-diamond') as HTMLInputElement
+const editOtherInput = document.getElementById('edit-other') as HTMLInputElement
 const editExpiryInput = document.getElementById('edit-expiry') as HTMLInputElement
-const editReminderSelect = document.getElementById('edit-reminder') as HTMLSelectElement
+const editInvalidCheckbox = document.getElementById('edit-invalid') as HTMLInputElement
 const editCancelBtn = document.getElementById('edit-cancel-btn') as HTMLButtonElement
 const editSaveBtn = document.getElementById('edit-save-btn') as HTMLButtonElement
 
 let currentPassword = localStorage.getItem(ADMIN_PASSWORD_KEY) ?? ''
 let currentImageBase64 = ''
 let showExpired = false
-let cachedExpiredRows: Awaited<ReturnType<typeof listCodes>> = []
-let cachedActiveRows: Awaited<ReturnType<typeof listCodes>> = []
+let cachedExpiredRows: AdminCodeWithReports[] = []
+let cachedActiveRows: AdminCodeWithReports[] = []
 let pendingItems: Array<{
   id: string
   gameName: string
@@ -275,35 +268,37 @@ function toDatetimeLocalValue(iso?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function parseCodeReminderSelect(value: string): number | null {
-  if (value === '24' || value === '72' || value === '168') return Number(value)
-  return null
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 }
 
-function patrolScopeLabel(code: { reminderHours?: number | null }): string {
-  const h = code.reminderHours
-  if (h === 24) return '巡逻自 1 天内起'
-  if (h === 72) return '巡逻自 3 天内起'
-  return '巡逻自 7 天内起（默认）'
+function reportBadgeHtml(code: AdminCodeWithReports): string {
+  if (code.reportCount <= 0) return ''
+  const tip = code.reportTypeLabels.length ? code.reportTypeLabels.join('、') : '玩家报错'
+  return `<span title="${escapeAttr(tip)}" style="display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(220,38,38,0.12);color:#b91c1c;font-size:11px;font-weight:700;border:1px solid rgba(220,38,38,0.35);cursor:default;">⚠️ 有人报错</span>`
 }
 
-const EDIT_GAME_OPTIONS = ['无限暖暖', '闪耀暖暖'] as const
+function sortCodesWithReportsFirst(rows: AdminCodeWithReports[]): AdminCodeWithReports[] {
+  return [...rows].sort((a, b) => {
+    const ar = a.reportCount > 0 ? 1 : 0
+    const br = b.reportCount > 0 ? 1 : 0
+    if (br !== ar) return br - ar
+    if (a.isHighValue !== b.isHighValue) return a.isHighValue ? -1 : 1
+    const ae = a.expiryAt ? new Date(a.expiryAt).getTime() : Infinity
+    const be = b.expiryAt ? new Date(b.expiryAt).getTime() : Infinity
+    return ae - be
+  })
+}
 
 function openEditModal(id: number) {
   const code = cachedActiveRows.find((c) => c.id === id)
   if (!code) return
   editIdInput.value = String(id)
-  editGameNameSelect.value = (EDIT_GAME_OPTIONS as readonly string[]).includes(code.gameName)
-    ? code.gameName
-    : '无限暖暖'
   editCodeTextInput.value = code.codeText
+  editDiamondInput.value = code.diamondReward ?? ''
+  editOtherInput.value = code.otherReward ?? code.rewardDesc ?? ''
   editExpiryInput.value = toDatetimeLocalValue(code.expiryAt)
-  const rh = code.reminderHours
-  if (rh === 24 || rh === 72) {
-    editReminderSelect.value = String(rh)
-  } else {
-    editReminderSelect.value = ''
-  }
+  editInvalidCheckbox.checked = Boolean(code.isInvalid)
   editModal.style.display = 'flex'
 }
 
@@ -321,10 +316,16 @@ function diamondSvg() {
 
 async function refreshList() {
   try {
-    const rows = await listCodes()
+    const pwd = getAdminPassword()
+    const rows: AdminCodeWithReports[] = verifyAdminPassword(pwd)
+      ? await fetchAdminCodesWithReports(pwd)
+      : (await listCodes()).map((c) => ({ ...c, reportCount: 0, reportTypeLabels: [] as string[] }))
+
     const now = Date.now()
-    const activeRows = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
-    cachedExpiredRows = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
+    const activeRaw = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
+    const expiredRaw = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
+    const activeRows = sortCodesWithReportsFirst(activeRaw)
+    cachedExpiredRows = sortCodesWithReportsFirst(expiredRaw)
     cachedActiveRows = activeRows
 
     expiredTitle.textContent = `查看已过期的兑换码 (${cachedExpiredRows.length})`
@@ -336,11 +337,10 @@ async function refreshList() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));">
           <div style="min-width:0;flex:1;">
             <div style="font-weight:600;">
-              ${code.gameName} - <code>${code.codeText}</code>
+              ${code.gameName} - <code>${code.codeText}</code>${reportBadgeHtml(code)}
             </div>
             <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
               过期: ${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '永久'}
-              <br/>${patrolScopeLabel(code)}
               ${
                 code.diamondReward
                   ? `<br/>${diamondSvg()}${code.diamondReward} 钻石`
@@ -385,7 +385,7 @@ function renderExpiredList() {
       (code) => `
       <div style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));opacity:0.5;">
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:800;">${code.gameName} - <code>${code.codeText}</code></div>
+          <div style="font-weight:800;">${code.gameName} - <code>${code.codeText}</code>${reportBadgeHtml(code)}</div>
           <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">
             已过期：${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '未知'} / ${code.diamondReward ? `${diamondSvg()}${code.diamondReward} 钻石` : code.otherReward || code.rewardDesc || ''}
           </div>
@@ -480,8 +480,6 @@ form.addEventListener('submit', async (event) => {
     const diamondReward = String(data.get('diamondReward') ?? '').trim()
     const otherReward = String(data.get('otherReward') ?? '').trim()
 
-    const reminderHours = parseCodeReminderSelect(String(data.get('codeReminder') ?? ''))
-
     await addCode({
       password: getAdminPassword(),
       gameName: String(data.get('gameName') ?? ''),
@@ -491,7 +489,6 @@ form.addEventListener('submit', async (event) => {
       otherReward: otherReward || undefined,
       expiryAt: data.get('expiryAt') ? new Date(String(data.get('expiryAt'))).toISOString() : undefined,
       source: String(data.get('source') ?? ''),
-      reminderHours,
     })
     status.textContent = '保存成功'
     status.style.color = '#15803d'
@@ -857,7 +854,6 @@ editSaveBtn.addEventListener('click', async () => {
   }
   const expiryVal = editExpiryInput.value.trim()
   const expiryAt = expiryVal ? new Date(expiryVal).toISOString() : null
-  const reminderHours = parseCodeReminderSelect(editReminderSelect.value)
 
   status.textContent = '保存中…'
   status.style.color = 'hsl(var(--muted-foreground))'
@@ -865,10 +861,11 @@ editSaveBtn.addEventListener('click', async () => {
     await updateCode({
       password,
       id,
-      gameName: editGameNameSelect.value,
       codeText,
       expiryAt,
-      reminderHours,
+      diamondReward: editDiamondInput.value,
+      otherReward: editOtherInput.value,
+      isInvalid: editInvalidCheckbox.checked,
     })
     persistPassword(password)
     status.textContent = '已保存修改'
