@@ -1,7 +1,32 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
-import { buildStandardPushPayload, type StandardPushPayloadOverrides } from '../lib/web-push-payload'
+
+const DEFAULT_PUSH_TITLE = 'Cron 测试'
+const DEFAULT_PUSH_BODY = '这是定时任务发出的通知'
+const DEFAULT_ICON = '/icon-192x192.png'
+
+type PushPayloadFields = {
+  title?: string
+  body?: string
+  url?: string
+  icon?: string
+  badge?: string
+  badgeCount?: number
+}
+
+function buildStandardPushPayload(overrides?: PushPayloadFields): string {
+  const o = overrides ?? {}
+  return JSON.stringify({
+    title: o.title ?? DEFAULT_PUSH_TITLE,
+    body: o.body ?? DEFAULT_PUSH_BODY,
+    url: o.url ?? '/',
+    icon: o.icon ?? DEFAULT_ICON,
+    badge: o.badge ?? DEFAULT_ICON,
+    badgeCount:
+      typeof o.badgeCount === 'number' && Number.isFinite(o.badgeCount) ? Math.floor(o.badgeCount) : 1,
+  })
+}
 
 type PushRow = {
   endpoint: string
@@ -70,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const subs = (rows ?? []) as PushRow[]
     const valid = subs.filter((s) => s.endpoint && s.p256dh && s.auth_key)
 
-    const overrides: StandardPushPayloadOverrides = {
+    const overrides: PushPayloadFields = {
       title: body.title,
       body: body.body,
       url: body.url,

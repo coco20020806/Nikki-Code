@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
-import { buildStandardPushPayload } from '../lib/web-push-payload'
 
 /**
  * 与 Cron 间隔配合：剩余过期时间在 (R - 下沿, R + 上沿] 内视为命中用户选择的「提前 R 小时提醒」
@@ -9,6 +8,33 @@ import { buildStandardPushPayload } from '../lib/web-push-payload'
  */
 const MATCH_WINDOW_HOURS = 1.5
 const MATCH_UPPER_SLACK_HOURS = 0.5
+
+/** 与 api/push-all.ts 中 buildStandardPushPayload 一致（供 Service Worker JSON 解析） */
+const DEFAULT_PUSH_TITLE = 'Cron 测试'
+const DEFAULT_PUSH_BODY = '这是定时任务发出的通知'
+const DEFAULT_ICON = '/icon-192x192.png'
+
+type PushPayloadFields = {
+  title?: string
+  body?: string
+  url?: string
+  icon?: string
+  badge?: string
+  badgeCount?: number
+}
+
+function buildStandardPushPayload(overrides?: PushPayloadFields): string {
+  const o = overrides ?? {}
+  return JSON.stringify({
+    title: o.title ?? DEFAULT_PUSH_TITLE,
+    body: o.body ?? DEFAULT_PUSH_BODY,
+    url: o.url ?? '/',
+    icon: o.icon ?? DEFAULT_ICON,
+    badge: o.badge ?? DEFAULT_ICON,
+    badgeCount:
+      typeof o.badgeCount === 'number' && Number.isFinite(o.badgeCount) ? Math.floor(o.badgeCount) : 1,
+  })
+}
 
 type CodeRow = {
   id: number
@@ -184,6 +210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const aboutHours = Math.max(1, Math.round(remainingHours))
+      // 与 push-all 相同字段结构：title, body, url, icon, badge, badgeCount（未传 icon/badge 时用默认值）
       const payload = buildStandardPushPayload({
         title: '兑换码即将过期',
         body: `快去领取！兑换码 ${code.code_text} 还有约 ${aboutHours} 小时就要过期了！`,
