@@ -31,11 +31,13 @@ self.addEventListener('push', (event) => {
         (data.message != null && String(data.message).trim()) ||
         '您有一个兑换码即将到期'
       const url = data.url ? String(data.url) : '/'
+      const icon = (data.icon && String(data.icon).trim()) || '/icon-192x192.png'
+      const badgeImg = (data.badge && String(data.badge).trim()) || icon
 
       const showP = self.registration.showNotification(title, {
         body,
-        icon: '/icon-192x192.png',
-        badge: '/icon-192x192.png',
+        icon,
+        badge: badgeImg,
         data: { url },
         tag: 'nikki-push',
         renotify: true,

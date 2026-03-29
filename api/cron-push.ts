@@ -1,9 +1,12 @@
-// Last updated: 2026-03-28 01:40
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { buildStandardPushPayload } from '../lib/web-push-payload'
 
-/** 与定时任务间隔匹配：在此时间窗内视为「命中」该提醒档位（略宽于 R，减少漏发） */
+/**
+ * 与 Cron 间隔配合：剩余过期时间在 (R - 下沿, R + 上沿] 内视为命中用户选择的「提前 R 小时提醒」
+ * R = push_subscriptions.reminder_hours（1 / 6 / 12 / 24，默认 24）
+ */
 const MATCH_WINDOW_HOURS = 1.5
 const MATCH_UPPER_SLACK_HOURS = 0.5
 
@@ -35,6 +38,22 @@ function warnIfServerVapidMissing(): void {
   }
 }
 
+function logWebPushError(context: string, endpointPrefix: string, err: unknown): void {
+  const base: Record<string, unknown> = {
+    context,
+    endpoint: endpointPrefix,
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  }
+  if (err && typeof err === 'object') {
+    const o = err as { statusCode?: number; body?: string; headers?: unknown }
+    if (o.statusCode != null) base.statusCode = o.statusCode
+    if (o.body != null) base.body = o.body
+    if (o.headers != null) base.headers = o.headers
+  }
+  console.error('[cron-push] webpush 发送失败', base)
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = (process.env.CRON_SECRET || '').trim()
   const auth = (req.headers.authorization || '').trim()
@@ -43,6 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
+
+  const serverNowUtc = new Date().toISOString()
+  console.log('[cron-push] 服务器当前时间 (UTC):', serverNowUtc)
 
   warnIfServerVapidMissing()
 
@@ -65,6 +87,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const now = Date.now()
 
+  console.log(
+    `[cron-push] 匹配规则：每条订阅使用 push_subscriptions.reminder_hours（1/6/12/24，默认 24）；` +
+      `若码的「剩余小时数」落在 (R-${MATCH_WINDOW_HOURS}h, R+${MATCH_UPPER_SLACK_HOURS}h] 则推送`,
+  )
+
   const { data: codeRows, error: codesError } = await supabase
     .from('codes')
     .select('id, code_text, expiry_at')
@@ -72,28 +99,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .not('expiry_at', 'is', null)
 
   if (codesError) {
-    console.error('[cron-push] codes', codesError.message)
+    console.error('[cron-push] codes 查询失败', codesError.message)
     return res.status(500).json({ error: codesError.message })
   }
 
-  const codes = (codeRows ?? []).filter((c) => {
+  /** 仅「尚未过期」的兑换码（过期时间 > 当前时刻） */
+  const activeCodes = (codeRows ?? []).filter((c) => {
     const ms = parseExpiryMs((c as CodeRow).expiry_at)
     return ms !== null && ms > now
   }) as CodeRow[]
-  const codeIds = codes.map((c) => c.id)
+
+  const codeIds = activeCodes.map((c) => c.id)
+  console.log(`[cron-push] Found ${activeCodes.length} active codes (expiry > now, UTC comparison via parse)`)
 
   const { data: subRows, error: subError } = await supabase
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth_key, reminder_hours')
 
   if (subError) {
-    console.error('[cron-push] push_subscriptions', subError.message)
+    console.error('[cron-push] push_subscriptions 查询失败', subError.message)
     return res.status(500).json({ error: subError.message })
   }
 
   const subs = (subRows ?? []) as SubRow[]
-  if (!codes.length || !subs.length) {
-    return res.status(200).json({ ok: true, checked: 0, sent: 0, skipped: 0, failed: 0, message: '无待处理码或无订阅' })
+  const validSubs = subs.filter((s) => s.endpoint && s.p256dh && s.auth_key)
+  console.log(`[cron-push] Loaded ${validSubs.length} valid push subscriptions (with reminder_hours per row)`)
+
+  if (!activeCodes.length || !validSubs.length) {
+    return res.status(200).json({
+      ok: true,
+      checked: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      message: '无未过期兑换码或无订阅',
+      activeCodes: activeCodes.length,
+      subscriptions: validSubs.length,
+    })
   }
 
   let existingKeys = new Set<string>()
@@ -105,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .in('code_id', codeIds)
 
     if (sentError) {
-      console.error('[cron-push] sent_notifications', sentError.message)
+      console.error('[cron-push] sent_notifications 查询失败', sentError.message)
       return res.status(500).json({ error: sentError.message })
     }
     existingKeys = new Set(
@@ -120,16 +162,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let skipped = 0
   let failed = 0
 
-  for (const code of codes) {
+  for (const code of activeCodes) {
     const expiryMs = parseExpiryMs(code.expiry_at)
     if (expiryMs === null || expiryMs <= now) continue
 
     const remainingMs = expiryMs - now
     const remainingHours = remainingMs / (1000 * 3600)
 
-    for (const sub of subs) {
-      if (!sub.endpoint || !sub.p256dh || !sub.auth_key) continue
-
+    for (const sub of validSubs) {
       const R = sub.reminder_hours ?? 24
       const lower = R - MATCH_WINDOW_HOURS
       const upper = R + MATCH_UPPER_SLACK_HOURS
@@ -144,10 +184,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const aboutHours = Math.max(1, Math.round(remainingHours))
-      const payload = JSON.stringify({
+      const payload = buildStandardPushPayload({
         title: '兑换码即将过期',
         body: `快去领取！兑换码 ${code.code_text} 还有约 ${aboutHours} 小时就要过期了！`,
         url: '/',
+        badgeCount: 1,
       })
 
       try {
@@ -176,11 +217,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sent += 1
       } catch (e: unknown) {
         failed += 1
-        const msg = e instanceof Error ? e.message : String(e)
-        console.warn('[cron-push] 发送失败', sub.endpoint.slice(0, 60), msg)
+        logWebPushError('cron-push', sub.endpoint.slice(0, 80), e)
       }
     }
   }
 
-  return res.status(200).json({ ok: true, checked, sent, skipped, failed })
+  return res.status(200).json({
+    ok: true,
+    checked,
+    sent,
+    skipped,
+    failed,
+    matchMode: 'reminder_hours_per_subscription',
+    activeCodes: activeCodes.length,
+    subscriptions: validSubs.length,
+  })
 }
