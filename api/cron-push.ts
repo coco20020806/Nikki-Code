@@ -2,12 +2,19 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
 
-/**
- * 与 Cron 间隔配合：剩余过期时间在 (R - 下沿, R + 上沿] 内视为命中用户选择的「提前 R 小时提醒」
- * R = push_subscriptions.reminder_hours（1 / 6 / 12 / 24，默认 24）
- */
-const MATCH_WINDOW_HOURS = 1.5
-const MATCH_UPPER_SLACK_HOURS = 0.5
+/** 与前端设置一致；sent_notifications.kind 使用 expiry_reminder_${R} 区分档位防重复 */
+const ALLOWED_REMINDER_HOURS = [1, 6, 12, 24] as const
+const LEGACY_REMINDER_KIND = 'expiry_reminder'
+
+function reminderKindForHours(R: number): string {
+  return `expiry_reminder_${R}`
+}
+
+/** 将订阅的 reminder_hours 规范到允许值；异常值回退 24 */
+function normalizeReminderHours(raw: number | null | undefined): number {
+  const v = raw ?? 24
+  return (ALLOWED_REMINDER_HOURS as readonly number[]).includes(v) ? v : 24
+}
 
 /** 与 api/push-all.ts 中 buildStandardPushPayload 一致（供 Service Worker JSON 解析） */
 const DEFAULT_PUSH_TITLE = 'Cron 测试'
@@ -80,6 +87,10 @@ function logWebPushError(context: string, endpointPrefix: string, err: unknown):
   console.error('[cron-push] webpush 发送失败', base)
 }
 
+function subscriptionLogLabel(endpoint: string): string {
+  return endpoint.length > 72 ? `${endpoint.slice(0, 72)}…` : endpoint
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const secret = (process.env.CRON_SECRET || '').trim()
   const auth = (req.headers.authorization || '').trim()
@@ -114,8 +125,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const now = Date.now()
 
   console.log(
-    `[cron-push] 匹配规则：每条订阅使用 push_subscriptions.reminder_hours（1/6/12/24，默认 24）；` +
-      `若码的「剩余小时数」落在 (R-${MATCH_WINDOW_HOURS}h, R+${MATCH_UPPER_SLACK_HOURS}h] 则推送`,
+    '[cron-push] 阈值规则：对每条订阅取 push_subscriptions.reminder_hours（1/6/12/24，默认 24）；' +
+      '当码的 hours_left > 0 且 hours_left <= reminder_hours 时符合提醒条件。',
   )
 
   const { data: codeRows, error: codesError } = await supabase
@@ -129,14 +140,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: codesError.message })
   }
 
-  /** 仅「尚未过期」的兑换码（过期时间 > 当前时刻） */
   const activeCodes = (codeRows ?? []).filter((c) => {
     const ms = parseExpiryMs((c as CodeRow).expiry_at)
     return ms !== null && ms > now
   }) as CodeRow[]
 
   const codeIds = activeCodes.map((c) => c.id)
-  console.log(`[cron-push] Found ${activeCodes.length} active codes (expiry > now, UTC comparison via parse)`)
+  console.log(`[cron-push] Found ${activeCodes.length} active codes (expiry > now)`)
 
   const { data: subRows, error: subError } = await supabase
     .from('push_subscriptions')
@@ -149,7 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const subs = (subRows ?? []) as SubRow[]
   const validSubs = subs.filter((s) => s.endpoint && s.p256dh && s.auth_key)
-  console.log(`[cron-push] Loaded ${validSubs.length} valid push subscriptions (with reminder_hours per row)`)
+  console.log(`[cron-push] Loaded ${validSubs.length} valid push subscriptions`)
 
   if (!activeCodes.length || !validSubs.length) {
     return res.status(200).json({
@@ -157,6 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       checked: 0,
       sent: 0,
       skipped: 0,
+      skippedNotYetDue: 0,
       failed: 0,
       message: '无未过期兑换码或无订阅',
       activeCodes: activeCodes.length,
@@ -164,21 +175,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
+  const tierKinds = [...ALLOWED_REMINDER_HOURS.map(reminderKindForHours), LEGACY_REMINDER_KIND]
+
   let existingKeys = new Set<string>()
   if (codeIds.length) {
     const { data: sentRows, error: sentError } = await supabase
       .from('sent_notifications')
       .select('endpoint, code_id, kind')
-      .eq('kind', 'expiry_reminder')
       .in('code_id', codeIds)
+      .in('kind', tierKinds)
 
     if (sentError) {
       console.error('[cron-push] sent_notifications 查询失败', sentError.message)
       return res.status(500).json({ error: sentError.message })
     }
-    existingKeys = new Set(
-      (sentRows ?? []).map((r: { endpoint: string; code_id: number }) => `${r.endpoint}::${r.code_id}`),
-    )
+    for (const r of sentRows ?? []) {
+      const row = r as { endpoint: string; code_id: number; kind: string }
+      existingKeys.add(`${row.endpoint}::${row.code_id}::${row.kind}`)
+    }
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey)
@@ -186,6 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let checked = 0
   let sent = 0
   let skipped = 0
+  let skippedNotYetDue = 0
   let failed = 0
 
   for (const code of activeCodes) {
@@ -193,24 +208,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (expiryMs === null || expiryMs <= now) continue
 
     const remainingMs = expiryMs - now
-    const remainingHours = remainingMs / (1000 * 3600)
+    const hoursLeft = remainingMs / (1000 * 3600)
+    console.log(
+      `[cron-push] code id=${code.id} text=${code.code_text} hours_left=${hoursLeft.toFixed(3)} (threshold uses reminder_hours per subscription)`,
+    )
 
     for (const sub of validSubs) {
-      const R = sub.reminder_hours ?? 24
-      const lower = R - MATCH_WINDOW_HOURS
-      const upper = R + MATCH_UPPER_SLACK_HOURS
-      const inWindow = remainingHours > 0 && remainingHours <= upper && remainingHours > lower
-      if (!inWindow) continue
+      const R = normalizeReminderHours(sub.reminder_hours)
+      const kind = reminderKindForHours(R)
 
-      checked += 1
-      const dedupeKey = `${sub.endpoint}::${code.id}`
-      if (existingKeys.has(dedupeKey)) {
-        skipped += 1
+      if (hoursLeft <= 0) continue
+
+      if (hoursLeft > R) {
+        skippedNotYetDue += 1
         continue
       }
 
-      const aboutHours = Math.max(1, Math.round(remainingHours))
-      // 与 push-all 相同字段结构：title, body, url, icon, badge, badgeCount（未传 icon/badge 时用默认值）
+      checked += 1
+
+      const dedupeKey = `${sub.endpoint}::${code.id}::${kind}`
+      const legacyKey = `${sub.endpoint}::${code.id}::${LEGACY_REMINDER_KIND}`
+
+      if (existingKeys.has(dedupeKey) || existingKeys.has(legacyKey)) {
+        skipped += 1
+        console.log(
+          `[cron-push] Reminder for ${R}h already sent (code_id=${code.id}, subscription=${subscriptionLogLabel(sub.endpoint)}, kind=${existingKeys.has(legacyKey) ? LEGACY_REMINDER_KIND : kind}) — skipping`,
+        )
+        continue
+      }
+
+      const aboutHours = Math.max(1, Math.round(hoursLeft))
       const payload = buildStandardPushPayload({
         title: '兑换码即将过期',
         body: `快去领取！兑换码 ${code.code_text} 还有约 ${aboutHours} 小时就要过期了！`,
@@ -231,7 +258,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { error: insErr } = await supabase.from('sent_notifications').insert({
           endpoint: sub.endpoint,
           code_id: code.id,
-          kind: 'expiry_reminder',
+          kind,
         })
 
         if (insErr) {
@@ -242,6 +269,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         existingKeys.add(dedupeKey)
         sent += 1
+        console.log(
+          `[cron-push] Sent ${R}h reminder for code_id=${code.id} to subscription=${subscriptionLogLabel(sub.endpoint)}`,
+        )
       } catch (e: unknown) {
         failed += 1
         logWebPushError('cron-push', sub.endpoint.slice(0, 80), e)
@@ -254,8 +284,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     checked,
     sent,
     skipped,
+    skippedNotYetDue,
     failed,
-    matchMode: 'reminder_hours_per_subscription',
+    matchMode: 'threshold_hours_left_lte_reminder_hours',
     activeCodes: activeCodes.length,
     subscriptions: validSubs.length,
   })
