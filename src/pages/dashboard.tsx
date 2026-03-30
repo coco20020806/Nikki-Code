@@ -31,6 +31,7 @@ import {
   activateWaitingServiceWorkerAndReload,
   checkServiceWorkerUpdateAvailable,
 } from '@/lib/sw-update'
+import { APP_VERSION } from '@/lib/app-version'
 import { isVapidPublicKeyConfigured, subscribePushAndPersist, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import type { Code } from '@/types/code'
 
@@ -569,6 +570,10 @@ export default function Dashboard() {
                   </li>
                 </ul>
               </section>
+
+              <p className="mt-8 border-t border-border/50 pt-4 text-center text-xs tabular-nums text-muted-foreground">
+                版本 v{APP_VERSION}
+              </p>
             </div>
           </div>
         </div>
@@ -665,6 +670,10 @@ export default function Dashboard() {
                 <span className="font-bold">仅显示高价值兑换码</span>
                 <input type="checkbox" checked={highValueOnly} onChange={(e) => setHighValueOnly(e.target.checked)} />
               </label>
+
+              <p className="border-t border-border/60 pt-4 text-center text-xs tabular-nums text-muted-foreground">
+                NikkiCode v{APP_VERSION}
+              </p>
             </div>
           </div>
         </div>
