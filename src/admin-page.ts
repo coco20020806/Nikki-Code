@@ -1,6 +1,6 @@
 import './index.css'
 import { registerNikkiServiceWorker } from '@/lib/register-sw'
-import { getPushTestApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
+import { getBroadcastPushApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import {
   type AdminCodeWithReports,
   addCode,
@@ -71,6 +71,20 @@ root.innerHTML = `
         <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">保存到 Supabase</button>
       </form>
       <p id="status" style="margin-top:10px;"></p>
+      <div id="broadcast-push-card" style="margin-top:22px;padding:18px;border-radius:18px;border:1px solid rgba(244,114,182,0.45);background:linear-gradient(145deg,rgba(253,242,248,0.96),rgba(252,231,243,0.9));box-shadow:0 10px 32px rgba(236,72,153,0.14);">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <span style="font-size:28px;line-height:1;flex-shrink:0;" aria-hidden="true">📢</span>
+          <div style="flex:1;min-width:0;">
+            <h2 style="margin:0 0 6px;font-size:17px;font-weight:800;color:hsl(var(--foreground));letter-spacing:-0.02em;">新码上线 · 全服广播</h2>
+            <p style="margin:0 0 14px;font-size:12px;line-height:1.55;color:hsl(var(--muted-foreground));">从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并发送正式「新码上线」通知。需在服务端配置 VAPID 与 <code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>。</p>
+            <button id="broadcast-push-btn" type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 22px;border:none;border-radius:999px;background:linear-gradient(135deg,hsl(var(--primary)),#db2777);color:white;font-weight:700;cursor:pointer;font-size:14px;box-shadow:0 8px 26px rgba(219,39,119,0.38);">
+              <span style="font-size:18px;line-height:1;" aria-hidden="true">📢</span>
+              <span id="broadcast-push-btn-label">发布新码全服通知</span>
+            </button>
+          </div>
+        </div>
+        <p id="broadcast-push-msg" style="margin:14px 0 0;font-size:12px;color:hsl(var(--muted-foreground));min-height:1.2em;"></p>
+      </div>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
       <h2 style="margin:0 0 12px;font-size:24px;">进行中兑换码</h2>
@@ -93,22 +107,7 @@ root.innerHTML = `
       </div>
       <div id="submissions" style="margin-top:12px;"></div>
     </section>
-    <details id="push-test-details" style="margin-top:20px;border-radius:20px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.72);overflow:hidden;backdrop-filter:blur(12px);">
-      <summary style="cursor:pointer;list-style:none;padding:16px 20px;font-size:15px;font-weight:600;color:hsl(var(--foreground));display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <span>全服 Web Push 测试</span>
-        <span style="font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">展开</span>
-      </summary>
-      <div style="padding:0 20px 20px;border-top:1px solid hsl(var(--border));">
-        <div style="margin-top:14px;padding:12px 14px;border-radius:14px;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.1);font-size:13px;line-height:1.55;font-weight:600;color:hsl(var(--foreground));">
-          请确保你已在<strong>手机 PWA（主屏幕版）</strong>中点击了「开启推送提醒」，否则数据库里没有你的订阅数据。
-        </div>
-        <p style="margin:12px 0 12px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
-          点击按钮后，服务端会从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并向每台设备发送测试通知。需在 Vercel 配置 VAPID 密钥、<code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>（仅服务端）及 <code style="font-size:11px;">SUPABASE_URL</code> / <code style="font-size:11px;">VITE_SUPABASE_URL</code>。
-        </p>
-        <button id="push-test-btn" type="button" style="height:40px;padding:0 20px;border:1px solid hsl(var(--border));border-radius:999px;background:hsl(var(--foreground));color:hsl(var(--background));font-weight:500;cursor:pointer;font-size:14px;">向所有订阅设备发送测试</button>
-        <p id="push-test-msg" style="margin:10px 0 0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
-      </div>
-    </details>
+    <div id="admin-toast" role="status" aria-live="polite" style="display:none;position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;z-index:320;max-width:min(92vw,400px);padding:14px 20px;border-radius:16px;background:rgba(24,24,32,0.92);color:#fafafa;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 14px 44px rgba(0,0,0,0.28);backdrop-filter:blur(10px);text-align:center;transform:translateX(-50%);"></div>
     <div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:20px;background:rgba(15,15,20,0.38);backdrop-filter:blur(6px);">
       <div id="edit-modal-panel" style="width:100%;max-width:420px;border-radius:22px;border:1px solid hsl(var(--border));background:rgba(255,255,255,0.96);padding:22px 20px 20px;box-shadow:0 20px 50px rgba(0,0,0,0.12);">
         <h3 style="margin:0 0 16px;font-size:18px;font-weight:600;color:hsl(var(--foreground));letter-spacing:-0.02em;">编辑兑换码</h3>
@@ -158,8 +157,23 @@ const aiDropzone = document.getElementById('ai-dropzone') as HTMLDivElement
 const aiExtractBtn = document.getElementById('ai-extract-btn') as HTMLButtonElement
 const aiStatus = document.getElementById('ai-status') as HTMLParagraphElement
 const pendingListWrap = document.getElementById('pending-list') as HTMLDivElement
-const pushTestBtn = document.getElementById('push-test-btn') as HTMLButtonElement | null
-const pushTestMsg = document.getElementById('push-test-msg') as HTMLParagraphElement | null
+const broadcastPushBtn = document.getElementById('broadcast-push-btn') as HTMLButtonElement | null
+const broadcastPushBtnLabel = document.getElementById('broadcast-push-btn-label') as HTMLSpanElement | null
+const broadcastPushMsg = document.getElementById('broadcast-push-msg') as HTMLParagraphElement | null
+const adminToastEl = document.getElementById('admin-toast') as HTMLDivElement | null
+
+let adminToastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showAdminToast(message: string) {
+  if (!adminToastEl) return
+  if (adminToastTimer) clearTimeout(adminToastTimer)
+  adminToastEl.textContent = message
+  adminToastEl.style.display = 'block'
+  adminToastTimer = setTimeout(() => {
+    adminToastEl.style.display = 'none'
+    adminToastTimer = null
+  }, 4000)
+}
 const editModal = document.getElementById('edit-modal') as HTMLDivElement
 const editIdInput = document.getElementById('edit-code-id') as HTMLInputElement
 const editCodeTextInput = document.getElementById('edit-code-text') as HTMLInputElement
@@ -896,19 +910,29 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && editModal.style.display === 'flex') closeEditModal()
 })
 
-pushTestBtn?.addEventListener('click', async () => {
-  if (!pushTestMsg) return
-  pushTestMsg.textContent = ''
+broadcastPushBtn?.addEventListener('click', async () => {
+  if (!broadcastPushMsg || !broadcastPushBtn || !broadcastPushBtnLabel) return
+
   const password = getAdminPassword()
   if (!password) {
-    pushTestMsg.textContent = '请先输入管理员密码'
-    pushTestMsg.style.color = '#e11d48'
+    broadcastPushMsg.textContent = '请先输入管理员密码'
+    broadcastPushMsg.style.color = '#e11d48'
     return
   }
-  pushTestMsg.textContent = '正在向所有订阅设备发送…'
-  pushTestMsg.style.color = 'hsl(var(--muted-foreground))'
+
+  const ok = window.confirm(
+    '确定要给所有订阅用户发送「新码上线」通知吗？此操作不可撤销。',
+  )
+  if (!ok) return
+
+  broadcastPushMsg.textContent = ''
+  broadcastPushBtn.disabled = true
+  broadcastPushBtn.style.opacity = '0.88'
+  broadcastPushBtn.style.cursor = 'wait'
+  broadcastPushBtnLabel.textContent = '发送中…'
+
   try {
-    const res = await fetch(getPushTestApiUrl(), {
+    const res = await fetch(getBroadcastPushApiUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),
@@ -921,21 +945,34 @@ pushTestBtn?.addEventListener('click', async () => {
       failed?: number
     }
     if (!res.ok) {
-      pushTestMsg.textContent = data.error || `请求失败（${res.status}）`
-      pushTestMsg.style.color = '#e11d48'
+      broadcastPushMsg.textContent = data.error || `请求失败（${res.status}）`
+      broadcastPushMsg.style.color = '#e11d48'
       return
     }
     const total = data.total ?? 0
     const sent = data.sent ?? 0
     const failed = data.failed ?? 0
-    pushTestMsg.textContent =
-      total === 0
-        ? '完成：当前没有任何订阅记录（请确认用户已在 PWA 中开启推送）。'
-        : `完成：共 ${total} 条订阅，成功 ${sent}，失败 ${failed}。`
-    pushTestMsg.style.color = '#15803d'
+
+    if (total === 0) {
+      broadcastPushMsg.textContent = '当前没有任何订阅记录（请确认用户已在 PWA 中开启推送）。'
+      broadcastPushMsg.style.color = 'hsl(var(--muted-foreground))'
+      showAdminToast('当前暂无已订阅用户')
+    } else {
+      broadcastPushMsg.textContent =
+        failed > 0
+          ? `已处理 ${total} 条订阅：成功 ${sent}，失败 ${failed}。`
+          : `已向全部 ${sent} 条订阅发送完毕。`
+      broadcastPushMsg.style.color = '#15803d'
+      showAdminToast(`成功向 ${sent} 位用户发送了通知`)
+    }
   } catch (e) {
-    pushTestMsg.textContent = e instanceof Error ? e.message : '发送失败'
-    pushTestMsg.style.color = '#e11d48'
+    broadcastPushMsg.textContent = e instanceof Error ? e.message : '发送失败'
+    broadcastPushMsg.style.color = '#e11d48'
+  } finally {
+    broadcastPushBtn.disabled = false
+    broadcastPushBtn.style.opacity = ''
+    broadcastPushBtn.style.cursor = ''
+    broadcastPushBtnLabel.textContent = '发布新码全服通知'
   }
 })
 

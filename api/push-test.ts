@@ -8,12 +8,16 @@ type PushRow = {
   auth_key: string
 }
 
+const BROADCAST_TITLE = '✨ NikkiCode：新礼包到账！'
+const BROADCAST_BODY = '刚刚发布了新的兑换码，快回来看一眼，别让福利过期哦！'
+const DEFAULT_ICON = '/icon-192x192.png'
+
 function warnIfServerVapidMissing(): void {
   const pub = (process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || '').trim()
   const priv = (process.env.VAPID_PRIVATE_KEY || '').trim()
   if (!pub || !priv) {
     console.warn(
-      '[NikkiCode push-test] 服务器缺少 VAPID 密钥：请配置 VAPID_PRIVATE_KEY，以及 VAPID_PUBLIC_KEY（或与前端一致的 VITE_VAPID_PUBLIC_KEY）。另需设置 VAPID_SUBJECT（如 mailto:xxx）。',
+      '[NikkiCode broadcast-push] 服务器缺少 VAPID 密钥：请配置 VAPID_PRIVATE_KEY，以及 VAPID_PUBLIC_KEY（或与前端一致的 VITE_VAPID_PUBLIC_KEY）。另需设置 VAPID_SUBJECT（如 mailto:xxx）。',
     )
   }
 }
@@ -22,9 +26,23 @@ function warnIfSupabaseServiceRoleMissing(): void {
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
   if (!key) {
     console.warn(
-      '[NikkiCode push-test] 全服推送需要 SUPABASE_SERVICE_ROLE_KEY（仅服务端），用于读取 push_subscriptions 全表；请勿将该密钥写入前端或提交到仓库。',
+      '[NikkiCode broadcast-push] 全服推送需要 SUPABASE_SERVICE_ROLE_KEY（仅服务端），用于读取 push_subscriptions 全表；请勿将该密钥写入前端或提交到仓库。',
     )
   }
+}
+
+function requestAppHomeUrl(req: VercelRequest): string {
+  const xfHost = req.headers['x-forwarded-host']
+  const hostRaw = (Array.isArray(xfHost) ? xfHost[0] : xfHost) || req.headers.host || ''
+  const host = String(hostRaw).split(',')[0].trim()
+  const xfProto = req.headers['x-forwarded-proto']
+  const protoRaw = (Array.isArray(xfProto) ? xfProto[0] : xfProto) || 'https'
+  const proto = String(protoRaw).split(',')[0].trim()
+  if (!host) return '/'
+  let base = (process.env.VITE_BASE_PATH || process.env.BASE_PATH || '').trim()
+  base = base.replace(/^\/+|\/+$/g, '')
+  const path = base ? `/${base}/` : '/'
+  return `${proto}://${host}${path}`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -66,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('endpoint, p256dh, auth_key')
 
     if (dbError) {
-      console.error('[NikkiCode push-test] Supabase:', dbError.message)
+      console.error('[NikkiCode broadcast-push] Supabase:', dbError.message)
       return res.status(500).json({ error: `读取订阅失败：${dbError.message}` })
     }
 
@@ -75,10 +93,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     webpush.setVapidDetails(subject, publicKey, privateKey)
 
+    const openUrl = requestAppHomeUrl(req)
     const payload = JSON.stringify({
-      title: '全服推送测试',
-      body: '如果你看到这条，说明 PWA 推送通了！',
-      url: '/',
+      title: BROADCAST_TITLE,
+      body: BROADCAST_BODY,
+      url: openUrl,
+      icon: DEFAULT_ICON,
+      badge: DEFAULT_ICON,
+      badgeCount: 1,
     })
 
     let sent = 0
@@ -91,13 +113,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             keys: { p256dh: row.p256dh, auth: row.auth_key },
           },
           payload,
-          { TTL: 120 },
+          { TTL: 3600 },
         )
         sent += 1
       } catch (e: unknown) {
         failed += 1
         const msg = e instanceof Error ? e.message : String(e)
-        console.warn('[NikkiCode push-test] 单条发送失败:', row.endpoint.slice(0, 80), msg)
+        console.warn('[NikkiCode broadcast-push] 单条发送失败:', row.endpoint.slice(0, 80), msg)
       }
     }
 
@@ -109,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : '发送失败'
-    console.error('[NikkiCode push-test]', e)
+    console.error('[NikkiCode broadcast-push]', e)
     return res.status(500).json({ error: message })
   }
 }

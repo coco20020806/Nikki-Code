@@ -602,7 +602,7 @@ export default function Dashboard() {
               </section>
 
               <p className="mt-8 border-t border-border/50 pt-4 text-center text-xs tabular-nums text-muted-foreground">
-                版本 v{APP_VERSION}
+                Version {APP_VERSION}
               </p>
             </div>
           </div>
@@ -702,7 +702,7 @@ export default function Dashboard() {
               </label>
 
               <p className="border-t border-border/60 pt-4 text-center text-xs tabular-nums text-muted-foreground">
-                NikkiCode v{APP_VERSION}
+                Version {APP_VERSION}
               </p>
             </div>
           </div>
