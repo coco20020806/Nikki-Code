@@ -48,7 +48,9 @@ export function Layout({
         <main className="w-full flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">{children}</main>
         <footer className="w-full py-8 text-center text-sm font-medium text-muted-foreground">
           <p>及时获取最新兑换码福利</p>
-          <p className="mt-2 text-xs tabular-nums text-muted-foreground/80">NikkiCode · Version {APP_VERSION}</p>
+          <p className="mt-2 text-xs tabular-nums text-muted-foreground/80">
+          NikkiCode · v{APP_VERSION} (Stable)
+        </p>
         </footer>
       </div>
     </div>

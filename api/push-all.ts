@@ -4,7 +4,7 @@ import webpush from 'web-push'
 
 const DEFAULT_PUSH_TITLE = 'Cron 测试'
 const DEFAULT_PUSH_BODY = '这是定时任务发出的通知'
-const DEFAULT_ICON = '/icon-192x192.png'
+const DEFAULT_ICON = '/apple-touch-icon.png'
 
 type PushPayloadFields = {
   title?: string

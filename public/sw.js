@@ -1,4 +1,6 @@
-/* NikkiCode PWA — 处理推送并在系统层展示通知 */
+/* NikkiCode PWA — v1.2.0 · Service Worker */
+const CACHE_NAME = 'nikki-v1.2.0'
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
@@ -19,7 +21,15 @@ self.addEventListener('message', (event) => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys()
+      await Promise.all(
+        keys.filter((k) => k.startsWith('nikki-v') && k !== CACHE_NAME).map((k) => caches.delete(k)),
+      )
+      await self.clients.claim()
+    })(),
+  )
 })
 
 self.addEventListener('push', (event) => {
@@ -46,7 +56,7 @@ self.addEventListener('push', (event) => {
         (data.message != null && String(data.message).trim()) ||
         '您有一个兑换码即将到期'
       const url = data.url ? String(data.url) : '/'
-      const icon = (data.icon && String(data.icon).trim()) || '/icon-192x192.png'
+      const icon = (data.icon && String(data.icon).trim()) || '/apple-touch-icon.png'
       const badgeImg = (data.badge && String(data.badge).trim()) || icon
 
       const showP = self.registration.showNotification(title, {

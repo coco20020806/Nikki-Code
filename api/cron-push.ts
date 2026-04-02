@@ -72,7 +72,7 @@ function pushCopyForTier(tier: PatrolTier, codeText: string): { title: string; b
 /** 与 api/push-all.ts 中 buildStandardPushPayload 一致（供 Service Worker JSON 解析） */
 const DEFAULT_PUSH_TITLE = 'Cron 测试'
 const DEFAULT_PUSH_BODY = '这是定时任务发出的测试通知'
-const DEFAULT_ICON = '/icon-192x192.png'
+const DEFAULT_ICON = '/apple-touch-icon.png'
 
 type PushPayloadFields = {
   title?: string

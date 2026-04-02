@@ -10,7 +10,7 @@ type PushRow = {
 
 const BROADCAST_TITLE = '✨ NikkiCode：新礼包到账！'
 const BROADCAST_BODY = '刚刚发布了新的兑换码，快回来看一眼，别让福利过期哦！'
-const DEFAULT_ICON = '/icon-192x192.png'
+const DEFAULT_ICON = '/apple-touch-icon.png'
 
 function warnIfServerVapidMissing(): void {
   const pub = (process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || '').trim()
