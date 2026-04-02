@@ -190,6 +190,14 @@ function isAuthError(err: unknown): boolean {
   return err instanceof Error && err.message.includes('管理员密码错误')
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function persistPassword(password: string) {
   const trimmed = password.trim()
   if (!trimmed) return
@@ -423,7 +431,8 @@ async function refreshSubmissions() {
           <div style="min-width:0;flex:1;">
             ${
               item.type === 'image' && item.imageUrl
-                ? `<a href="${item.imageUrl}" target="_blank" rel="noreferrer"><img src="${item.imageUrl}" alt="投稿图片" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid hsl(var(--border));" /></a>`
+                ? `<a href="${item.imageUrl}" target="_blank" rel="noreferrer"><img src="${item.imageUrl}" alt="投稿图片" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid hsl(var(--border));" /></a>
+                  <div style="margin-top:6px;font-size:12px;font-style:italic;color:hsl(var(--muted-foreground));">昵称：${escapeHtml(String(item.nickname ?? '').trim() || '热心玩家')}</div>`
                 : `<div style="font-size:13px;line-height:1.6;text-decoration:${item.isRead ? 'line-through' : 'none'};">${item.content}</div>`
             }
             <div style="margin-top:6px;font-size:11px;color:hsl(var(--muted-foreground));">

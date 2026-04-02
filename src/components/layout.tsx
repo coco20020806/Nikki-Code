@@ -2,8 +2,18 @@ import type { ReactNode } from 'react'
 import { Heart, Sparkles } from 'lucide-react'
 import { Link } from 'wouter'
 import { APP_VERSION } from '@/lib/app-version'
+import { cn } from '@/lib/utils'
 
-export function Layout({ children, rightSlot }: { children: ReactNode; rightSlot?: ReactNode }) {
+export function Layout({
+  children,
+  rightSlot,
+  /** 底部固定横幅占位，避免主内容与页脚被遮挡 */
+  bottomInsetPad = false,
+}: {
+  children: ReactNode
+  rightSlot?: ReactNode
+  bottomInsetPad?: boolean
+}) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden">
       <div className="pointer-events-none fixed top-0 left-0 -z-10 h-full w-full">
@@ -29,11 +39,18 @@ export function Layout({ children, rightSlot }: { children: ReactNode; rightSlot
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">{children}</main>
-      <footer className="w-full py-8 text-center text-sm font-medium text-muted-foreground">
-        <p>及时获取最新兑换码福利</p>
-        <p className="mt-2 text-xs tabular-nums text-muted-foreground/80">NikkiCode v{APP_VERSION}</p>
-      </footer>
+      <div
+        className={cn(
+          'mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col',
+          bottomInsetPad && 'pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))]',
+        )}
+      >
+        <main className="w-full flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">{children}</main>
+        <footer className="w-full py-8 text-center text-sm font-medium text-muted-foreground">
+          <p>及时获取最新兑换码福利</p>
+          <p className="mt-2 text-xs tabular-nums text-muted-foreground/80">NikkiCode v{APP_VERSION}</p>
+        </footer>
+      </div>
     </div>
   )
 }

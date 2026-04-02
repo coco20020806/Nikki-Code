@@ -20,6 +20,8 @@ export type Submission = {
   content: string
   type: 'text' | 'image'
   imageUrl?: string
+  /** 图片投稿昵称，空则管理端可显示为「热心玩家」 */
+  nickname?: string | null
   isFeatured: boolean
   isRead: boolean
   createdAt: string
@@ -28,6 +30,8 @@ export type Submission = {
 export type FeaturedImage = {
   id: number
   imageUrl: string
+  /** null / 空串时首页展示为「热心玩家」 */
+  nickname: string | null
 }
 
 function mapRowToCode(row: CodeRow): Code {
@@ -232,7 +236,9 @@ function safeStorageFileName(originalName: string): string {
   return cleaned || 'image.jpg'
 }
 
-export async function submitImageFeeding(file: File): Promise<void> {
+const MAX_POSTCARD_NICKNAME_LEN = 48
+
+export async function submitImageFeeding(file: File, options?: { nickname?: string }): Promise<void> {
   const safeName = safeStorageFileName(file.name)
   const filePath = `feedings/${Date.now()}-${safeName}`
 
@@ -246,11 +252,15 @@ export async function submitImageFeeding(file: File): Promise<void> {
     throw new Error(uploadError.message)
   }
 
+  const rawNick = (options?.nickname ?? '').trim().slice(0, MAX_POSTCARD_NICKNAME_LEN)
+  const nickname = rawNick.length > 0 ? rawNick : null
+
   const { data } = supabase.storage.from('submissions').getPublicUrl(filePath)
   const { error } = await supabase.from('submissions').insert({
     content: '',
     type: 'image',
     image_url: data.publicUrl,
+    nickname,
     is_read: false,
     is_featured: false,
   })
@@ -266,6 +276,7 @@ type SubmissionRow = {
   content: string | null
   type: 'text' | 'image' | null
   image_url: string | null
+  nickname: string | null
   is_featured: boolean | null
   is_read: boolean
   created_at: string
@@ -275,7 +286,7 @@ export async function listSubmissions(password: string, showRead: boolean): Prom
   requireAdminPassword(password)
   let query = supabase
     .from('submissions')
-    .select('id,content,type,image_url,is_featured,is_read,created_at')
+    .select('id,content,type,image_url,nickname,is_featured,is_read,created_at')
     .order('created_at', { ascending: false })
   if (!showRead) query = query.eq('is_read', false)
   const { data, error } = await query
@@ -285,6 +296,7 @@ export async function listSubmissions(password: string, showRead: boolean): Prom
     content: row.content ?? '',
     type: row.type === 'image' ? 'image' : 'text',
     imageUrl: row.image_url ?? undefined,
+    nickname: row.nickname ?? null,
     isFeatured: Boolean(row.is_featured),
     isRead: row.is_read,
     createdAt: row.created_at,
@@ -360,7 +372,7 @@ export async function upsertPushSubscription(
 export async function listFeaturedImages(limit = 30): Promise<FeaturedImage[]> {
   const { data, error } = await supabase
     .from('submissions')
-    .select('id,image_url')
+    .select('id,image_url,nickname')
     .eq('type', 'image')
     .eq('is_featured', true)
     .not('image_url', 'is', null)
@@ -368,6 +380,13 @@ export async function listFeaturedImages(limit = 30): Promise<FeaturedImage[]> {
     .limit(limit)
   if (error) throw new Error(error.message)
   return (data ?? [])
-    .map((row) => ({ id: Number((row as { id: number }).id), imageUrl: String((row as { image_url: string }).image_url) }))
+    .map((row) => {
+      const r = row as { id: number; image_url: string; nickname: string | null }
+      return {
+        id: Number(r.id),
+        imageUrl: String(r.image_url),
+        nickname: r.nickname && String(r.nickname).trim() ? String(r.nickname).trim() : null,
+      }
+    })
     .filter((x) => Boolean(x.imageUrl))
 }

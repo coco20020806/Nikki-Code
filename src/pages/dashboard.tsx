@@ -12,9 +12,11 @@ import {
   Send,
   Settings,
   WalletCards,
+  X,
 } from 'lucide-react'
 import { CodeCard } from '@/components/code-card'
 import { Layout } from '@/components/layout'
+import { PwaInstallBanner } from '@/components/pwa-install-banner'
 import { useClaimedCodes } from '@/hooks/use-claimed-codes'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
@@ -38,11 +40,16 @@ import type { Code } from '@/types/code'
 const GAME_FILTERS = ['未领取', '无限暖暖', '闪耀暖暖']
 const STORAGE_KEY = 'nikki_preferences_v1'
 
+function postcardDisplayName(nickname: string | null | undefined): string {
+  const t = (nickname ?? '').trim()
+  return t.length > 0 ? t : '热心玩家'
+}
+
 /** 与每日巡逻 Cron 一致：168=7天档起，72=3天档起，24=1天档起 */
 const PUSH_REMINDER_PRESETS = [
-  { value: 168, label: '到期前 7 天内（推荐，配合每日巡逻）' },
-  { value: 72, label: '到期前 3 天内起' },
-  { value: 24, label: '到期前 1 天内起' },
+  { value: 168, label: '到期前 7 天内（推荐）' },
+  { value: 72, label: '到期前 3 天内' },
+  { value: 24, label: '到期前 1 天内' },
 ] as const
 
 function normalizeStoredPushReminderHours(h: number): number {
@@ -73,9 +80,12 @@ export default function Dashboard() {
   const [feedbackContent, setFeedbackContent] = useState('')
   const [sendingFeedback, setSendingFeedback] = useState(false)
   const [postcardPreview, setPostcardPreview] = useState('')
+  const [postcardNickname, setPostcardNickname] = useState('')
   const [postcardFile, setPostcardFile] = useState<File | null>(null)
   const [uploadingPostcard, setUploadingPostcard] = useState(false)
   const [featuredImages, setFeaturedImages] = useState<FeaturedImage[]>([])
+  const [postcardLightbox, setPostcardLightbox] = useState<FeaturedImage | null>(null)
+  const [postcardLightboxLoaded, setPostcardLightboxLoaded] = useState(false)
   const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
   const [warningThresholdHours, setWarningThresholdHours] = useState(24)
   const [pushReminderHours, setPushReminderHours] = useState<number>(168)
@@ -83,6 +93,7 @@ export default function Dashboard() {
   const [codes, setCodes] = useState<Code[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [pwaBannerPad, setPwaBannerPad] = useState(false)
   const { claimedIds, claimCode, unclaimCode } = useClaimedCodes()
   const { toast } = useToast()
 
@@ -152,12 +163,28 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!supportOpen) setSupportQrExpanded(false)
+    if (!supportOpen) {
+      setSupportQrExpanded(false)
+      setPostcardNickname('')
+    }
   }, [supportOpen])
 
   useEffect(() => {
     if (supportTab !== 'coffee') setSupportQrExpanded(false)
   }, [supportTab])
+
+  useEffect(() => {
+    setPostcardLightboxLoaded(false)
+  }, [postcardLightbox?.id, postcardLightbox?.imageUrl])
+
+  useEffect(() => {
+    if (!postcardLightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPostcardLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [postcardLightbox])
 
   useEffect(() => {
     warnIfVapidKeysMissingInClient()
@@ -280,13 +307,14 @@ export default function Dashboard() {
     }
     setUploadingPostcard(true)
     try {
-      await submitImageFeeding(postcardFile)
+      await submitImageFeeding(postcardFile, { nickname: postcardNickname })
       toast({
         title: '明信片已送达 ✨',
         description: '你的心意作者都收到啦，愿搭配之力与你同在～',
       })
       setPostcardFile(null)
       setPostcardPreview('')
+      setPostcardNickname('')
       setSupportOpen(false)
     } catch (err) {
       console.error('[handleSubmitPostcard] 投喂图片上传失败，完整错误:', err)
@@ -327,7 +355,9 @@ export default function Dashboard() {
   })
 
   return (
+    <>
     <Layout
+      bottomInsetPad={pwaBannerPad}
       rightSlot={
         <div className="flex items-center gap-2">
           <button
@@ -611,27 +641,9 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <p className="mb-2 font-bold">过期预警阈值</p>
-                <p className="mb-2 text-xs text-muted-foreground">仅影响列表里兑换码卡片的「即将过期」高亮，与推送无关。</p>
-                <select
-                  className="h-10 w-full rounded-xl border border-input bg-white px-3"
-                  value={warningThresholdHours}
-                  onChange={(e) => setWarningThresholdHours(Number(e.target.value))}
-                >
-                  <option value={0}>关闭</option>
-                  <option value={1}>1 小时前</option>
-                  <option value={6}>6 小时前</option>
-                  <option value={12}>12 小时前</option>
-                  <option value={24}>24 小时前</option>
-                  <option value={72}>3 天前</option>
-                  <option value={168}>7 天前</option>
-                </select>
-              </div>
-
-              <div>
-                <p className="mb-2 font-bold">到期提醒时机</p>
+                <p className="mb-2 font-bold">到期提醒时间</p>
                 <p className="mb-2 text-xs text-muted-foreground">
-                  与每日巡逻一致：服务器在 7 天 / 3 天 / 1 天到期前各档最多提醒一次；此处选择你愿意接收的最早一档（越宽越早收到）。需已开启推送，更改后会同步到服务器。
+                  若存在 7 天 / 3 天 / 1 天内即将到期的兑换码，开启推送后，将收到推送提醒，并在APP显示未读小红点。
                 </p>
                 <select
                   className="h-10 w-full rounded-xl border border-input bg-white px-3"
@@ -666,8 +678,26 @@ export default function Dashboard() {
                 </select>
               </div>
 
+              <div>
+                <p className="mb-2 font-bold">兑换码高亮设置</p>
+                <p className="mb-2 text-xs text-muted-foreground">仅影响列表里兑换码卡片的「即将过期」高亮，与推送、红点显示无关。</p>
+                <select
+                  className="h-10 w-full rounded-xl border border-input bg-white px-3"
+                  value={warningThresholdHours}
+                  onChange={(e) => setWarningThresholdHours(Number(e.target.value))}
+                >
+                  <option value={0}>关闭</option>
+                  <option value={1}>1 小时前</option>
+                  <option value={6}>6 小时前</option>
+                  <option value={12}>12 小时前</option>
+                  <option value={24}>24 小时前</option>
+                  <option value={72}>3 天前</option>
+                  <option value={168}>7 天前</option>
+                </select>
+              </div>
+
               <label className="flex items-center justify-between rounded-xl border border-border bg-white p-3">
-                <span className="font-bold">仅显示高价值兑换码</span>
+                <span className="font-bold">仅显示含钻石兑换码</span>
                 <input type="checkbox" checked={highValueOnly} onChange={(e) => setHighValueOnly(e.target.checked)} />
               </label>
 
@@ -798,6 +828,14 @@ export default function Dashboard() {
                 <p className="text-muted-foreground">传一张你最得意的女儿截图，给作者充充电吧！</p>
                 <input type="file" accept="image/*" onChange={handleSelectPostcard} className="block w-full rounded-xl border border-input bg-white p-2" />
                 {postcardPreview ? <img src={postcardPreview} alt="预览" className="max-h-56 w-full rounded-2xl object-cover" /> : null}
+                <input
+                  type="text"
+                  value={postcardNickname}
+                  onChange={(e) => setPostcardNickname(e.target.value)}
+                  maxLength={48}
+                  placeholder="留下你的昵称吧 (可选)"
+                  className="h-11 w-full rounded-xl border border-input bg-white px-4 text-sm placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-primary/40 focus:outline-none"
+                />
                 <Button type="button" onClick={handleSubmitPostcard} disabled={uploadingPostcard}>
                   {uploadingPostcard ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传投喂图片'}
                 </Button>
@@ -815,18 +853,70 @@ export default function Dashboard() {
             <p className="py-6 text-sm text-muted-foreground">还没有精选明信片，期待你的第一张投喂~</p>
           ) : (
             featuredImages.map((item) => (
-              <img
+              <button
                 key={item.id}
-                src={item.imageUrl}
-                alt="精选投喂"
-                className="h-40 w-28 shrink-0 rounded-xl object-cover"
-                loading="lazy"
-              />
+                type="button"
+                onClick={() => setPostcardLightbox(item)}
+                className="group relative shrink-0 cursor-pointer rounded-xl border-0 bg-transparent p-0 text-left shadow-sm ring-2 ring-transparent transition-all hover:ring-primary/35 focus-visible:ring-primary/50 focus-visible:outline-none"
+              >
+                <img
+                  src={item.imageUrl}
+                  alt={`${postcardDisplayName(item.nickname)} 的投喂`}
+                  className="h-40 w-28 rounded-xl object-cover transition-transform group-hover:scale-[1.02] group-active:scale-[0.98]"
+                  loading="lazy"
+                />
+                <span className="mt-1 block max-w-[7rem] truncate px-0.5 text-center font-display text-[11px] italic tracking-wide text-primary/75">
+                  {postcardDisplayName(item.nickname)}
+                </span>
+              </button>
             ))
           )}
         </div>
       </section>
       </div>
     </Layout>
+    <PwaInstallBanner onVisibleChange={setPwaBannerPad} />
+
+      {postcardLightbox ? (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/78 p-4 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label="明信片大图预览"
+          onClick={() => setPostcardLightbox(null)}
+        >
+          <button
+            type="button"
+            aria-label="关闭预览"
+            onClick={(e) => {
+              e.stopPropagation()
+              setPostcardLightbox(null)
+            }}
+            className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/22"
+          >
+            <X className="h-5 w-5" strokeWidth={2.2} />
+          </button>
+          <div className="relative flex max-h-[min(88dvh,900px)] max-w-full flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <div className="relative flex min-h-[min(40dvh,240px)] min-w-[min(72vw,200px)] max-w-full items-center justify-center sm:min-h-[280px]">
+              {!postcardLightboxLoaded ? (
+                <Loader2 className="absolute h-10 w-10 animate-spin text-white/75" aria-hidden />
+              ) : null}
+              <img
+                src={postcardLightbox.imageUrl}
+                alt="明信片大图"
+                className={`max-h-[min(78dvh,780px)] w-auto max-w-full rounded-2xl object-contain shadow-2xl ring-1 ring-white/15 transition-opacity duration-300 ${postcardLightboxLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={() => setPostcardLightboxLoaded(true)}
+              />
+            </div>
+            <p className="mt-5 max-w-[min(92vw,520px)] text-center text-sm text-white/90">
+              <span className="text-white/55">来自：</span>
+              <span className="font-display text-base font-medium italic tracking-wide text-[#fce7f3] drop-shadow-md">
+                {postcardDisplayName(postcardLightbox.nickname)}
+              </span>
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }
