@@ -94,11 +94,6 @@ function normalizeStoredPushReminderHours(h: number): number {
   return 168
 }
 
-function isWithinReminderWindow(expiryMs: number, nowMs: number, reminderHours: number): boolean {
-  if (reminderHours === -1) return true
-  return expiryMs <= nowMs + reminderHours * 3600 * 1000
-}
-
 function parseExpiryMs(expiryAt?: string): number | null {
   if (!expiryAt) return null
   // 若后端返回无时区字符串，按中国时区解释
@@ -309,12 +304,6 @@ export default function Dashboard() {
         const expiryMs = parseExpiryMs(item.expiryAt)
         return expiryMs === null || expiryMs > nowMs
       })
-      .filter((item) => {
-        if (selectedGame !== '未领取') return true
-        const expiryMs = parseExpiryMs(item.expiryAt)
-        if (expiryMs === null) return false
-        return isWithinReminderWindow(expiryMs, nowMs, pushReminderHours)
-      })
       .filter((item) => (selectedGame === '未领取' ? !claimedIds.has(item.id) : true))
 
     return list.sort((a, b) => {
@@ -329,7 +318,7 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings, pushReminderHours])
+  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -728,6 +717,13 @@ export default function Dashboard() {
                     <span>
                       <span className="font-medium text-foreground">查看已领取兑换码</span>
                       ：点击复制后兑换码将自动标记为已领取，点击进入无限暖暖/闪耀暖暖列表，可以查看已经兑换过的兑换码哦~
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">列表与红点说明</span>
+                      ：未领取列表显示所有关注区服的有效兑换码，红点仅提示即将到期的部分。
                     </span>
                   </li>
                 </ul>
