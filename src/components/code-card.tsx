@@ -12,13 +12,14 @@ import { reportIssue, type ReportType } from '@/lib/codes-api'
 
 interface CodeCardProps {
   code: Code
+  serverBadgeText?: string
   isClaimed: boolean
   onClaim: (id: number) => void
   onUnclaim: (id: number) => void
   warningThresholdHours: number
 }
 
-export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThresholdHours }: CodeCardProps) {
+export function CodeCard({ code, serverBadgeText, isClaimed, onClaim, onUnclaim, warningThresholdHours }: CodeCardProps) {
   const { toast } = useToast()
   const [reported, setReported] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -88,6 +89,9 @@ export function CodeCard({ code, isClaimed, onClaim, onUnclaim, warningThreshold
         <div className="mb-3 flex items-start justify-between gap-2 overflow-x-auto">
           <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             <Badge className={`tracking-wider uppercase ${gameBadgeClass}`}>{code.gameName}</Badge>
+            {serverBadgeText ? (
+              <span className="rounded px-1.5 py-0.5 text-xs font-semibold bg-pink-100 text-pink-600">{serverBadgeText}</span>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
             {isClaimed ? (

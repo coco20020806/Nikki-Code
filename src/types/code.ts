@@ -1,6 +1,8 @@
 export interface Code {
   id: number
   gameName: string
+  /** 区服标识：SN_CN / SN_TW / SN_JP / SN_GL / IN_CN / IN_GL */
+  server?: string
   codeText: string
   // 低价值/高价值奖励拆分：前者为“钻石奖励”，后者为“其他奖励”
   diamondReward?: string

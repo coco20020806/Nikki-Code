@@ -19,6 +19,18 @@ warnIfVapidKeysMissingInClient()
 import { format } from 'date-fns'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
+const SERVER_OPTIONS = {
+  '闪耀暖暖': [
+    { value: 'SN_CN', label: '国服 (SN_CN)' },
+    { value: 'SN_TW', label: '台服 (SN_TW)' },
+    { value: 'SN_JP', label: '日服 (SN_JP)' },
+    { value: 'SN_GL', label: '国际服 (SN_GL)' },
+  ],
+  '无限暖暖': [
+    { value: 'IN_CN', label: '国服 (IN_CN)' },
+    { value: 'IN_GL', label: '国际服 (IN_GL)' },
+  ],
+} as const
 
 const root = document.getElementById('admin-root')
 if (!root) throw new Error('admin root not found')
@@ -63,12 +75,20 @@ root.innerHTML = `
           <option value="无限暖暖">无限暖暖</option>
           <option value="闪耀暖暖">闪耀暖暖</option>
         </select>
+        <select name="server" class="h-11 w-full rounded-xl border border-input bg-white px-4"></select>
         <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4" required />
         <input name="diamondReward" placeholder="钻石奖励（可选；留空则低价值）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <input name="expiryAt" type="datetime-local" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;">
+          <input name="expiryDate" type="date" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+          <select name="expiryHour" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
+          <select name="expiryMinute" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
+          <button id="set-end-of-day-btn" type="button" style="height:44px;padding:0 12px;border:1px solid hsl(var(--border));border-radius:999px;background:#fff;color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">
+            23:59
+          </button>
+        </div>
         <input name="source" placeholder="来源（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">保存到 Supabase</button>
+        <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">确认上线</button>
       </form>
       <p id="status" style="margin-top:10px;"></p>
       <div id="broadcast-push-card" style="margin-top:22px;padding:18px;border-radius:18px;border:1px solid rgba(244,114,182,0.45);background:linear-gradient(145deg,rgba(253,242,248,0.96),rgba(252,231,243,0.9));box-shadow:0 10px 32px rgba(236,72,153,0.14);">
@@ -115,6 +135,16 @@ root.innerHTML = `
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">兑换码文字
           <input id="edit-code-text" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:15px;box-sizing:border-box;" />
         </label>
+        <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">区服
+          <select id="edit-server" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
+            <option value="IN_CN">无限暖暖 - 国服</option>
+            <option value="IN_GL">无限暖暖 - 国际服</option>
+            <option value="SN_CN">闪耀暖暖 - 国服</option>
+            <option value="SN_TW">闪耀暖暖 - 台服</option>
+            <option value="SN_JP">闪耀暖暖 - 日服</option>
+            <option value="SN_GL">闪耀暖暖 - Global</option>
+          </select>
+        </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">钻石奖励（留空则低价值）
           <input id="edit-diamond" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
         </label>
@@ -122,7 +152,11 @@ root.innerHTML = `
           <input id="edit-other" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
         </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">过期时间
-          <input id="edit-expiry" type="datetime-local" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
+          <div style="margin-top:6px;display:grid;grid-template-columns:1fr auto auto;gap:8px;">
+            <input id="edit-expiry-date" type="date" style="display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;" />
+            <select id="edit-expiry-hour" style="height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:14px;box-sizing:border-box;min-width:76px;"></select>
+            <select id="edit-expiry-minute" style="height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:14px;box-sizing:border-box;min-width:76px;"></select>
+          </div>
         </label>
         <label style="display:flex;align-items:center;gap:10px;margin-bottom:18px;font-size:13px;font-weight:500;color:hsl(var(--foreground));cursor:pointer;">
           <input id="edit-invalid" type="checkbox" style="width:18px;height:18px;accent-color:hsl(var(--destructive));" />
@@ -151,6 +185,15 @@ const headerPasswordInput = document.getElementById('header-password') as HTMLIn
 const headerVerifyBtn = document.getElementById('header-verify-btn') as HTMLButtonElement
 const resetPasswordBtn = document.getElementById('reset-password-btn') as HTMLButtonElement
 const gameNameInput = form.querySelector('select[name="gameName"]') as HTMLSelectElement
+const serverInput = form.querySelector('select[name="server"]') as HTMLSelectElement
+const codeTextInput = form.querySelector('input[name="codeText"]') as HTMLInputElement
+const diamondRewardInput = form.querySelector('input[name="diamondReward"]') as HTMLInputElement
+const otherRewardInput = form.querySelector('input[name="otherReward"]') as HTMLInputElement
+const expiryDateInput = form.querySelector('input[name="expiryDate"]') as HTMLInputElement
+const expiryHourInput = form.querySelector('select[name="expiryHour"]') as HTMLSelectElement
+const expiryMinuteInput = form.querySelector('select[name="expiryMinute"]') as HTMLSelectElement
+const sourceInput = form.querySelector('input[name="source"]') as HTMLInputElement
+const setEndOfDayBtn = document.getElementById('set-end-of-day-btn') as HTMLButtonElement
 const aiTextInput = document.getElementById('ai-text') as HTMLTextAreaElement
 const aiImageInput = document.getElementById('ai-image') as HTMLInputElement
 const aiDropzone = document.getElementById('ai-dropzone') as HTMLDivElement
@@ -177,9 +220,12 @@ function showAdminToast(message: string) {
 const editModal = document.getElementById('edit-modal') as HTMLDivElement
 const editIdInput = document.getElementById('edit-code-id') as HTMLInputElement
 const editCodeTextInput = document.getElementById('edit-code-text') as HTMLInputElement
+const editServerInput = document.getElementById('edit-server') as HTMLSelectElement
 const editDiamondInput = document.getElementById('edit-diamond') as HTMLInputElement
 const editOtherInput = document.getElementById('edit-other') as HTMLInputElement
-const editExpiryInput = document.getElementById('edit-expiry') as HTMLInputElement
+const editExpiryDateInput = document.getElementById('edit-expiry-date') as HTMLInputElement
+const editExpiryHourInput = document.getElementById('edit-expiry-hour') as HTMLSelectElement
+const editExpiryMinuteInput = document.getElementById('edit-expiry-minute') as HTMLSelectElement
 const editInvalidCheckbox = document.getElementById('edit-invalid') as HTMLInputElement
 const editCancelBtn = document.getElementById('edit-cancel-btn') as HTMLButtonElement
 const editSaveBtn = document.getElementById('edit-save-btn') as HTMLButtonElement
@@ -197,8 +243,99 @@ let pendingItems: Array<{
   otherReward?: string
   expiryAt?: string
   source?: string
+  server?: string
   copied?: boolean
 }> = []
+
+function defaultServerByGame(gameName: string): string {
+  return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
+}
+
+function renderServerOptions(selectEl: HTMLSelectElement, gameName: string, preferredValue?: string) {
+  const options = SERVER_OPTIONS[gameName as keyof typeof SERVER_OPTIONS] ?? SERVER_OPTIONS['无限暖暖']
+  const keep = preferredValue && options.some((item) => item.value === preferredValue)
+  selectEl.innerHTML = options
+    .map((item) => `<option value="${item.value}">${item.label}</option>`)
+    .join('')
+  selectEl.value = keep ? preferredValue : options[0].value
+}
+
+function flashField(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
+  const prevTransition = el.style.transition
+  const prevBoxShadow = el.style.boxShadow
+  const prevBorderColor = el.style.borderColor
+  el.style.transition = 'box-shadow 0.28s ease, border-color 0.28s ease'
+  el.style.borderColor = 'hsl(var(--primary))'
+  el.style.boxShadow = '0 0 0 3px rgba(236, 72, 153, 0.2)'
+  setTimeout(() => {
+    el.style.boxShadow = prevBoxShadow
+    el.style.borderColor = prevBorderColor
+    el.style.transition = prevTransition
+  }, 900)
+}
+
+function fillHourMinuteOptions(hourEl: HTMLSelectElement, minuteEl: HTMLSelectElement) {
+  hourEl.innerHTML = Array.from({ length: 24 }, (_, i) => {
+    const v = String(i).padStart(2, '0')
+    return `<option value="${v}">${v}</option>`
+  }).join('')
+  minuteEl.innerHTML = Array.from({ length: 60 }, (_, i) => {
+    const v = String(i).padStart(2, '0')
+    return `<option value="${v}">${v}</option>`
+  }).join('')
+}
+
+function expiryPartsFromIso(iso?: string): { date: string; hour: string; minute: string } {
+  if (!iso) return { date: '', hour: '23', minute: '59' }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { date: '', hour: '23', minute: '59' }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    hour: pad(d.getHours()),
+    minute: pad(d.getMinutes()),
+  }
+}
+
+function buildExpiryIso(date: string, hour: string, minute: string): string | undefined {
+  const dt = date.trim()
+  if (!dt) return undefined
+  const hh = hour.trim() || '00'
+  const mm = minute.trim() || '00'
+  return new Date(`${dt}T${hh}:${mm}:00`).toISOString()
+}
+
+function applyAiItemToForm(item: {
+  gameName?: string
+  server?: string
+  codeText?: string
+  diamondReward?: string
+  otherReward?: string
+  expiryAt?: string
+  source?: string
+}) {
+  const game = item.gameName === '闪耀暖暖' || item.gameName === '无限暖暖' ? item.gameName : gameNameInput.value
+  gameNameInput.value = game
+  renderServerOptions(serverInput, game, item.server || undefined)
+  codeTextInput.value = (item.codeText ?? '').trim()
+  diamondRewardInput.value = item.diamondReward ?? ''
+  otherRewardInput.value = item.otherReward ?? ''
+  sourceInput.value = item.source ?? ''
+  const exp = expiryPartsFromIso(item.expiryAt)
+  expiryDateInput.value = exp.date
+  expiryHourInput.value = exp.hour
+  expiryMinuteInput.value = exp.minute
+
+  flashField(gameNameInput)
+  flashField(serverInput)
+  flashField(codeTextInput)
+  flashField(diamondRewardInput)
+  flashField(otherRewardInput)
+  flashField(expiryDateInput)
+  flashField(expiryHourInput)
+  flashField(expiryMinuteInput)
+  flashField(sourceInput)
+}
 
 function isAuthError(err: unknown): boolean {
   return err instanceof Error && err.message.includes('管理员密码错误')
@@ -270,24 +407,16 @@ function renderPendingList() {
           <div style="font-size:11px;color:hsl(var(--muted-foreground));">${item.expiryAt ? format(new Date(item.expiryAt), 'yyyy-MM-dd HH:mm') : '无过期时间'}</div>
         </div>
         <div style="margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-weight:700;">${item.codeText || '(未识别到兑换码)'}</div>
-        <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">钻石：${item.diamondReward || '无'} / 其他：${item.otherReward || '无'}</div>
+        <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">区服：${item.server || '默认'} / 钻石：${item.diamondReward || '无'} / 其他：${item.otherReward || '无'}</div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" data-action="copy-pending" data-id="${item.id}" style="border:1px solid hsl(var(--border));background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">${item.copied ? '已复制 ✅' : '一键复制'}</button>
-          <button type="button" data-action="approve-pending" data-id="${item.id}" style="border:0;background:hsl(var(--primary));color:white;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">一键上线</button>
+          <button type="button" data-action="fill-pending" data-id="${item.id}" style="border:0;background:hsl(var(--primary));color:white;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">填充表单</button>
           <button type="button" data-action="discard-pending" data-id="${item.id}" style="border:1px solid hsl(var(--destructive)/0.4);background:#fff;color:hsl(var(--destructive));border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:500;font-size:13px;">删除</button>
         </div>
       </div>
     `,
     )
     .join('')
-}
-
-function toDatetimeLocalValue(iso?: string): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function escapeAttr(s: string): string {
@@ -317,9 +446,13 @@ function openEditModal(id: number) {
   if (!code) return
   editIdInput.value = String(id)
   editCodeTextInput.value = code.codeText
+  editServerInput.value = code.server || (code.gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN')
   editDiamondInput.value = code.diamondReward ?? ''
   editOtherInput.value = code.otherReward ?? code.rewardDesc ?? ''
-  editExpiryInput.value = toDatetimeLocalValue(code.expiryAt)
+  const exp = expiryPartsFromIso(code.expiryAt)
+  editExpiryDateInput.value = exp.date
+  editExpiryHourInput.value = exp.hour
+  editExpiryMinuteInput.value = exp.minute
   editInvalidCheckbox.checked = Boolean(code.isInvalid)
   editModal.style.display = 'flex'
 }
@@ -362,6 +495,7 @@ async function refreshList() {
               ${code.gameName} - <code>${code.codeText}</code>${reportBadgeHtml(code)}
             </div>
             <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
+              区服: ${code.server || '默认'}<br/>
               过期: ${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '永久'}
               ${
                 code.diamondReward
@@ -409,7 +543,7 @@ function renderExpiredList() {
         <div style="min-width:0;flex:1;">
           <div style="font-weight:800;">${code.gameName} - <code>${code.codeText}</code>${reportBadgeHtml(code)}</div>
           <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));">
-            已过期：${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '未知'} / ${code.diamondReward ? `${diamondSvg()}${code.diamondReward} 钻石` : code.otherReward || code.rewardDesc || ''}
+            区服：${code.server || '默认'} / 已过期：${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '未知'} / ${code.diamondReward ? `${diamondSvg()}${code.diamondReward} 钻石` : code.otherReward || code.rewardDesc || ''}
           </div>
         </div>
         <button
@@ -506,17 +640,20 @@ form.addEventListener('submit', async (event) => {
     await addCode({
       password: getAdminPassword(),
       gameName: String(data.get('gameName') ?? ''),
+      server:
+        String(data.get('server') ?? '').trim() || defaultServerByGame(String(data.get('gameName') ?? '无限暖暖')),
       // 直接获取输入值，不再强制转换大小写
       codeText: String(data.get('codeText') ?? '').trim(),
       diamondReward: diamondReward || undefined,
       otherReward: otherReward || undefined,
-      expiryAt: data.get('expiryAt') ? new Date(String(data.get('expiryAt'))).toISOString() : undefined,
+      expiryAt: buildExpiryIso(String(data.get('expiryDate') ?? ''), String(data.get('expiryHour') ?? ''), String(data.get('expiryMinute') ?? '')),
       source: String(data.get('source') ?? ''),
     })
     status.textContent = '保存成功'
     status.style.color = '#15803d'
     persistPassword(getAdminPassword())
     form.reset()
+    renderServerOptions(serverInput, gameNameInput.value)
     await refreshList()
     await refreshSubmissions()
   } catch (err) {
@@ -651,6 +788,23 @@ form.addEventListener('input', () => {
   void refreshSubmissions()
 })
 
+gameNameInput.addEventListener('change', () => {
+  renderServerOptions(serverInput, gameNameInput.value)
+})
+
+setEndOfDayBtn.addEventListener('click', () => {
+  if (!expiryDateInput.value) {
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    expiryDateInput.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  }
+  expiryHourInput.value = '23'
+  expiryMinuteInput.value = '59'
+  flashField(expiryDateInput)
+  flashField(expiryHourInput)
+  flashField(expiryMinuteInput)
+})
+
 headerVerifyBtn.addEventListener('click', () => {
   const pwd = String(headerPasswordInput.value ?? '').trim()
   if (!verifyAdminPassword(pwd)) {
@@ -740,6 +894,7 @@ aiExtractBtn.addEventListener('click', async () => {
     const data = (await resp.json()) as
       | Array<{
           gameName?: string
+          server?: string
           codeText?: string
           diamondReward?: string
           otherReward?: string
@@ -759,6 +914,7 @@ aiExtractBtn.addEventListener('click', async () => {
     const list = (Array.isArray(data) ? data : []) as Array<{
       error?: string
       gameName?: string
+      server?: string
       codeText?: string
       diamondReward?: string
       otherReward?: string
@@ -770,6 +926,7 @@ aiExtractBtn.addEventListener('click', async () => {
       .map((item, index) => ({
         id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
         gameName: item.gameName || '',
+        server: item.server || '',
         codeText: item.codeText || '',
         diamondReward: item.diamondReward || '',
         otherReward: item.otherReward || '',
@@ -780,8 +937,14 @@ aiExtractBtn.addEventListener('click', async () => {
 
     pendingItems = [...normalized, ...pendingItems]
     renderPendingList()
-    aiStatus.textContent = `识别成功，已加入待验证列表（${normalized.length} 条）`
-    aiStatus.style.color = '#15803d'
+    if (normalized.length > 0) {
+      applyAiItemToForm(normalized[0])
+    }
+    aiStatus.textContent =
+      normalized.length > 0
+        ? `识别成功，已自动填充首条到表单（共 ${normalized.length} 条），请核对后点击“确认上线”。`
+        : '未识别到有效兑换码，请检查文本或截图。'
+    aiStatus.style.color = normalized.length > 0 ? '#15803d' : '#e11d48'
   } catch (err) {
     aiStatus.textContent = err instanceof Error ? err.message : '识别失败'
     aiStatus.style.color = '#e11d48'
@@ -818,39 +981,11 @@ pendingListWrap.addEventListener('click', async (e) => {
     return
   }
 
-  if (action === 'approve-pending') {
-    const password = getAdminPassword()
-    if (!password.trim()) {
-      status.textContent = '请先输入管理员密码后再一键上线'
-      status.style.color = '#e11d48'
-      return
-    }
-    status.textContent = '上线中...'
-    status.style.color = 'hsl(var(--muted-foreground))'
-    try {
-      await addCode({
-        password,
-        gameName: item.gameName || gameNameInput.value || '无限暖暖',
-        codeText: item.codeText,
-        diamondReward: item.diamondReward || undefined,
-        otherReward: item.otherReward || undefined,
-        expiryAt: item.expiryAt || undefined,
-        source: item.source || undefined,
-      })
-      persistPassword(password)
-      pendingItems = pendingItems.filter((x) => x.id !== id)
-      renderPendingList()
-      status.textContent = '已成功上线'
-      status.style.color = '#15803d'
-      await refreshList()
-    } catch (err) {
-      if (isAuthError(err)) {
-        clearPasswordAndRequireInput('密码错误，请重新输入管理员密码')
-        return
-      }
-      status.textContent = err instanceof Error ? err.message : '上线失败'
-      status.style.color = '#e11d48'
-    }
+  if (action === 'fill-pending') {
+    applyAiItemToForm(item)
+    status.textContent = '已填充到表单，请复核后点击“确认上线”'
+    status.style.color = '#15803d'
+    return
   }
 })
 
@@ -875,8 +1010,8 @@ editSaveBtn.addEventListener('click', async () => {
     status.style.color = '#e11d48'
     return
   }
-  const expiryVal = editExpiryInput.value.trim()
-  const expiryAt = expiryVal ? new Date(expiryVal).toISOString() : null
+  const expiryAt =
+    buildExpiryIso(editExpiryDateInput.value, editExpiryHourInput.value, editExpiryMinuteInput.value) ?? null
 
   status.textContent = '保存中…'
   status.style.color = 'hsl(var(--muted-foreground))'
@@ -885,6 +1020,7 @@ editSaveBtn.addEventListener('click', async () => {
       password,
       id,
       codeText,
+      server: editServerInput.value,
       expiryAt,
       diamondReward: editDiamondInput.value,
       otherReward: editOtherInput.value,
@@ -977,6 +1113,13 @@ broadcastPushBtn?.addEventListener('click', async () => {
 })
 
 renderAuthState()
+fillHourMinuteOptions(expiryHourInput, expiryMinuteInput)
+fillHourMinuteOptions(editExpiryHourInput, editExpiryMinuteInput)
+expiryHourInput.value = '23'
+expiryMinuteInput.value = '59'
+editExpiryHourInput.value = '23'
+editExpiryMinuteInput.value = '59'
+renderServerOptions(serverInput, gameNameInput.value)
 renderPendingList()
 void refreshList()
 void refreshSubmissions()

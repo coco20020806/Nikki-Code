@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 type CodeRow = {
   id: number
   game_name: string
+  server: string | null
   code_text: string
   reward_desc: string | null
   diamond_reward: string | null
@@ -41,6 +42,7 @@ function mapRowToCode(row: CodeRow): Code {
   return {
     id: row.id,
     gameName: row.game_name,
+    server: row.server ?? undefined,
     codeText: row.code_text,
     diamondReward: diamondReward && diamondReward.trim() ? diamondReward : undefined,
     otherReward: otherReward && otherReward.trim() ? otherReward : undefined,
@@ -70,7 +72,7 @@ export async function listCodes(game?: string, opts?: { includeInvalid?: boolean
   let query = supabase
     .from('codes')
     .select(
-      'id,game_name,code_text,reward_desc,diamond_reward,other_reward,expiry_at,reminder_hours,is_high_value,is_invalid,source',
+      'id,game_name,server,code_text,reward_desc,diamond_reward,other_reward,expiry_at,reminder_hours,is_high_value,is_invalid,source',
     )
     .order('is_high_value', { ascending: false })
     .order('expiry_at', { ascending: true, nullsFirst: false })
@@ -86,6 +88,7 @@ export async function listCodes(game?: string, opts?: { includeInvalid?: boolean
 export type AddCodeInput = {
   password: string
   gameName: string
+  server?: string
   codeText: string
   diamondReward?: string
   otherReward?: string
@@ -103,6 +106,7 @@ export async function addCode(input: AddCodeInput): Promise<void> {
 
   const { error } = await supabase.from('codes').insert({
     game_name: input.gameName,
+    server: input.server?.trim() || null,
     code_text: input.codeText.toUpperCase(),
     // 兼容旧列：如果表里只有 reward_desc，你也能看到“其他奖励”
     reward_desc: other || null,
@@ -124,6 +128,7 @@ export type UpdateCodeInput = {
   password: string
   id: number
   codeText: string
+  server?: string
   expiryAt?: string | null
   diamondReward?: string
   otherReward?: string
@@ -143,6 +148,7 @@ export async function updateCode(input: UpdateCodeInput): Promise<void> {
 
   const patch: Record<string, unknown> = {
     code_text: ct.toUpperCase(),
+    server: input.server?.trim() || null,
     diamond_reward: diamond || null,
     other_reward: other || null,
     reward_desc: other || null,

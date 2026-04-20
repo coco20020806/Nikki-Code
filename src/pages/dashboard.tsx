@@ -39,6 +39,40 @@ import type { Code } from '@/types/code'
 
 const GAME_FILTERS = ['未领取', '无限暖暖', '闪耀暖暖']
 const STORAGE_KEY = 'nikki_preferences_v1'
+const SERVER_SETTINGS_KEY = 'user_server_settings'
+
+type ServerSettings = {
+  shining: string[]
+  infinity: string[]
+}
+
+const DEFAULT_SERVER_SETTINGS: ServerSettings = {
+  shining: ['SN_CN'],
+  infinity: ['IN_CN'],
+}
+
+const SHINING_SERVER_OPTIONS = [
+  { code: 'SN_CN', label: '国服' },
+  { code: 'SN_TW', label: '台服' },
+  { code: 'SN_JP', label: '日服' },
+  { code: 'SN_GL', label: 'Global' },
+] as const
+
+const INFINITY_SERVER_OPTIONS = [
+  { code: 'IN_CN', label: '国服' },
+  { code: 'IN_GL', label: 'Global' },
+] as const
+
+const SERVER_LABEL_MAP: Record<string, string> = {
+  SN_CN: '国服',
+  SN_TW: '台服',
+  SN_JP: '日服',
+  SN_GL: 'Global',
+  IN_CN: '国服',
+  IN_GL: 'Global',
+}
+const XHS_GROUP_URL = 'https://xhslink.com/m/4CZ4iefddWD'
+const XHS_DEV_URL = 'https://xhslink.com/m/1F4K5OqbaLQ'
 
 function postcardDisplayName(nickname: string | null | undefined): string {
   const t = (nickname ?? '').trim()
@@ -67,6 +101,19 @@ function parseExpiryMs(expiryAt?: string): number | null {
   return Number.isNaN(ms) ? null : ms
 }
 
+function normalizeServerSettings(raw?: Partial<ServerSettings> | null): ServerSettings {
+  const shining = Array.isArray(raw?.shining) ? raw.shining.filter(Boolean) : []
+  const infinity = Array.isArray(raw?.infinity) ? raw.infinity.filter(Boolean) : []
+  return {
+    shining: shining.length ? [...new Set(shining)] : [...DEFAULT_SERVER_SETTINGS.shining],
+    infinity: infinity.length ? [...new Set(infinity)] : [...DEFAULT_SERVER_SETTINGS.infinity],
+  }
+}
+
+function getDefaultServerByGame(gameName: string): string {
+  return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
+}
+
 export default function Dashboard() {
   const [selectedGame, setSelectedGame] = useState<string>('未领取')
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'unsupported'>('default')
@@ -87,6 +134,7 @@ export default function Dashboard() {
   const [postcardLightbox, setPostcardLightbox] = useState<FeaturedImage | null>(null)
   const [postcardLightboxLoaded, setPostcardLightboxLoaded] = useState(false)
   const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
+  const [serverSettings, setServerSettings] = useState<ServerSettings>(DEFAULT_SERVER_SETTINGS)
   const [warningThresholdHours, setWarningThresholdHours] = useState(24)
   const [pushReminderHours, setPushReminderHours] = useState<number>(168)
   const [highValueOnly, setHighValueOnly] = useState(false)
@@ -119,6 +167,20 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SERVER_SETTINGS_KEY)
+      if (!raw) {
+        setServerSettings(DEFAULT_SERVER_SETTINGS)
+        return
+      }
+      const parsed = JSON.parse(raw) as Partial<ServerSettings>
+      setServerSettings(normalizeServerSettings(parsed))
+    } catch {
+      setServerSettings(DEFAULT_SERVER_SETTINGS)
+    }
+  }, [])
+
+  useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -130,6 +192,10 @@ export default function Dashboard() {
     )
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
   }, [preferredGames, warningThresholdHours, pushReminderHours, highValueOnly])
+
+  useEffect(() => {
+    localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(serverSettings))
+  }, [serverSettings])
 
   useEffect(() => {
     let active = true
@@ -207,8 +273,18 @@ export default function Dashboard() {
 
   const sortedCodes = useMemo(() => {
     const nowMs = Date.now()
+    const selectedServers = {
+      闪耀暖暖: new Set(serverSettings.shining),
+      无限暖暖: new Set(serverSettings.infinity),
+    }
     const list = [...codes]
       .filter((item) => preferredGames.includes(item.gameName))
+      .filter((item) => {
+        const gameServers = selectedServers[item.gameName as '闪耀暖暖' | '无限暖暖']
+        if (!gameServers || gameServers.size === 0) return true
+        const server = item.server || getDefaultServerByGame(item.gameName)
+        return gameServers.has(server)
+      })
       .filter((item) => (highValueOnly ? Boolean(item.diamondReward?.trim()) : true))
       .filter((item) => {
         const expiryMs = parseExpiryMs(item.expiryAt)
@@ -228,7 +304,7 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame])
+  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -236,6 +312,42 @@ export default function Dashboard() {
       return next.length ? next : prev
     })
   }
+
+  const toggleServerPreference = (game: 'shining' | 'infinity', code: string, checked: boolean) => {
+    setServerSettings((prev) => {
+      const nextList = checked ? [...new Set([...prev[game], code])] : prev[game].filter((item) => item !== code)
+      return {
+        ...prev,
+        [game]: nextList.length ? nextList : [...DEFAULT_SERVER_SETTINGS[game]],
+      }
+    })
+  }
+
+  const getServerBadgeText = (code: Code): string | undefined => {
+    const gameKey = code.gameName === '闪耀暖暖' ? 'shining' : code.gameName === '无限暖暖' ? 'infinity' : null
+    if (!gameKey) return undefined
+    if (serverSettings[gameKey].length <= 1) return undefined
+    const serverCode = code.server || getDefaultServerByGame(code.gameName)
+    return SERVER_LABEL_MAP[serverCode] || serverCode
+  }
+
+  const handleJump = useCallback(
+    (url: string) => {
+      if (typeof window === 'undefined') return
+      const ua = window.navigator.userAgent.toLowerCase()
+      const mobileByUA = /iphone|ipad|ipod|android|mobile|harmonyos/i.test(ua)
+      const mobileByWidth = window.innerWidth <= 900
+      const isMobile = mobileByUA || mobileByWidth
+      if (!isMobile) {
+        toast({
+          title: '网页端暂不支持跳转，请在手机端 App 中查看',
+        })
+        return
+      }
+      window.open(url, '_blank', 'noopener,noreferrer')
+    },
+    [toast],
+  )
 
   const handleEnablePush = async () => {
     warnIfVapidKeysMissingInClient()
@@ -479,6 +591,7 @@ export default function Dashboard() {
               <CodeCard
                 key={code.id}
                 code={code}
+                serverBadgeText={getServerBadgeText(code)}
                 isClaimed={claimedIds.has(code.id)}
                 onClaim={claimCode}
                 onUnclaim={unclaimCode}
@@ -529,29 +642,15 @@ export default function Dashboard() {
                   <li className="flex gap-2">
                     <span className="mt-0.5 shrink-0 text-primary">·</span>
                     <span>
-                      <span className="font-medium text-foreground">高亮兑换码</span>
-                      ：可设置时间窗口标记即将过期兑换码高亮。
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-0.5 shrink-0 text-primary">·</span>
-                    <span>
-                      <span className="font-medium text-foreground">智能到期提醒</span>
-                      ：在设置中可设置提醒时间，在对应时间内有未兑换兑换码将推送。
-                    </span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-0.5 shrink-0 text-primary">·</span>
-                    <span>
-                      <span className="font-medium text-foreground">持久化红点</span>
-                      ：只要还有没领的码，红点将持续存在。
+                      <span className="font-medium text-foreground">设置与提醒</span>
+                      ：右上角设置可切换关注的游戏、区服、兑换码红点提醒时间等，记得点击开启推送哦~
                     </span>
                   </li>
                   <li className="flex gap-2">
                     <span className="mt-0.5 shrink-0 text-primary">·</span>
                     <span>
                       <span className="font-medium text-foreground">暖心投喂</span>
-                      ：支持投喂明信片功能，和开发者分享你的精美搭配与快乐。
+                      ：支持投喂明信片功能，和大家一起分享你的搭配吧~
                     </span>
                   </li>
                 </ul>
@@ -560,7 +659,7 @@ export default function Dashboard() {
               <section className="mb-6">
                 <h3 className="mb-3 flex items-center gap-2 font-display text-base font-bold text-foreground">
                   <span aria-hidden>🚀</span>
-                  快速上手
+                  如何添加为 APP 使用
                 </h3>
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-zinc-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
@@ -596,6 +695,13 @@ export default function Dashboard() {
                     <span>
                       <span className="font-medium text-foreground">消除红点</span>
                       ：将兑换码标记为「已兑换」，红点数字将自动递减。
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="mt-0.5 shrink-0 text-primary">·</span>
+                    <span>
+                      <span className="font-medium text-foreground">查看已领取兑换码</span>
+                      ：点击复制后兑换码将自动标记为已领取，点击进入无限暖暖/闪耀暖暖列表，可以查看已经兑换过的兑换码哦~
                     </span>
                   </li>
                 </ul>
@@ -638,6 +744,41 @@ export default function Dashboard() {
                   />
                   闪耀暖暖
                 </label>
+              </div>
+
+              <div>
+                <p className="mb-1 font-bold">区服偏好设置</p>
+                <p className="mb-2 text-xs text-muted-foreground">勾选你关注的区服，列表会实时按区服过滤。</p>
+                <div className="rounded-xl border border-border bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold text-foreground">闪耀暖暖</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SHINING_SERVER_OPTIONS.map((item) => (
+                      <label key={item.code} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={serverSettings.shining.includes(item.code)}
+                          onChange={(e) => toggleServerPreference('shining', item.code, e.target.checked)}
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-2 rounded-xl border border-border bg-white p-3">
+                  <p className="mb-2 text-xs font-semibold text-foreground">无限暖暖</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {INFINITY_SERVER_OPTIONS.map((item) => (
+                      <label key={item.code} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={serverSettings.infinity.includes(item.code)}
+                          onChange={(e) => toggleServerPreference('infinity', item.code, e.target.checked)}
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -872,6 +1013,29 @@ export default function Dashboard() {
             ))
           )}
         </div>
+      </section>
+
+      <section className="pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] mt-10 text-center text-xs text-gray-400">
+        <p>
+          更多最新信息
+          <button
+            type="button"
+            onClick={() => handleJump(XHS_GROUP_URL)}
+            className="ml-1 rounded px-1.5 py-0.5 text-pink-400 underline underline-offset-2 transition hover:text-pink-500"
+          >
+            @精准日叠自我攻略攻略组
+          </button>
+        </p>
+        <p className="mt-1">
+          技术开发反馈
+          <button
+            type="button"
+            onClick={() => handleJump(XHS_DEV_URL)}
+            className="ml-1 rounded px-1.5 py-0.5 text-pink-400 underline underline-offset-2 transition hover:text-pink-500"
+          >
+            @TAT
+          </button>
+        </p>
       </section>
       </div>
     </Layout>
