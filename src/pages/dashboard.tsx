@@ -81,15 +81,22 @@ function postcardDisplayName(nickname: string | null | undefined): string {
 
 /** 与每日巡逻 Cron 一致：168=7天档起，72=3天档起，24=1天档起 */
 const PUSH_REMINDER_PRESETS = [
+  { value: -1, label: '凡是有未兑换均提醒' },
   { value: 168, label: '到期前 7 天内（推荐）' },
   { value: 72, label: '到期前 3 天内' },
   { value: 24, label: '到期前 1 天内' },
 ] as const
 
 function normalizeStoredPushReminderHours(h: number): number {
+  if (h === -1 || h === 0) return -1
   if (h === 24 || h === 72 || h === 168) return h
   if (h === 1 || h === 6 || h === 12) return 24
   return 168
+}
+
+function isWithinReminderWindow(expiryMs: number, nowMs: number, reminderHours: number): boolean {
+  if (reminderHours === -1) return true
+  return expiryMs <= nowMs + reminderHours * 3600 * 1000
 }
 
 function parseExpiryMs(expiryAt?: string): number | null {
@@ -302,6 +309,12 @@ export default function Dashboard() {
         const expiryMs = parseExpiryMs(item.expiryAt)
         return expiryMs === null || expiryMs > nowMs
       })
+      .filter((item) => {
+        if (selectedGame !== '未领取') return true
+        const expiryMs = parseExpiryMs(item.expiryAt)
+        if (expiryMs === null) return false
+        return isWithinReminderWindow(expiryMs, nowMs, pushReminderHours)
+      })
       .filter((item) => (selectedGame === '未领取' ? !claimedIds.has(item.id) : true))
 
     return list.sort((a, b) => {
@@ -316,7 +329,7 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings])
+  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings, pushReminderHours])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -380,7 +393,8 @@ export default function Dashboard() {
     }
 
     try {
-      const ok = await subscribePushAndPersist(pushReminderHours)
+      const effectivePushHours = pushReminderHours === -1 ? 168 : pushReminderHours
+      const ok = await subscribePushAndPersist(effectivePushHours)
       if (ok) {
         setPushStatus('granted')
         toast({ title: '推送已开启，订阅已保存 🌸' })
@@ -802,9 +816,13 @@ export default function Dashboard() {
                   className="h-10 w-full rounded-xl border border-input bg-white px-3"
                   value={pushReminderHours}
                   onChange={async (e) => {
-                    const v = Number(e.target.value) as 24 | 72 | 168
+                    const v = Number(e.target.value)
                     setPushReminderHours(v)
                     try {
+                      if (v === -1) {
+                        toast({ title: '已保存到本机', description: '“凡是有未兑换均提醒”仅影响红点与列表筛选，不同步到推送服务端。' })
+                        return
+                      }
                       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
                         toast({ title: '已保存到本机', description: '当前环境不支持推送，开启推送后将使用此选项。' })
                         return

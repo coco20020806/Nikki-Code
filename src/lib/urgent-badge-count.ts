@@ -39,6 +39,7 @@ export function parseExpiryMsForBadge(expiryAt?: string): number | null {
 export type UrgentBadgePrefs = {
   preferredGames: string[]
   serverSettings: ServerSettings
+  pushReminderHours: number
   highValueOnly: boolean
   claimedIds: Set<number>
 }
@@ -46,15 +47,21 @@ export type UrgentBadgePrefs = {
 export function readUrgentBadgePrefsFromStorage(): Omit<UrgentBadgePrefs, 'claimedIds'> & { claimedIds: Set<number> } {
   let preferredGames = ['无限暖暖', '闪耀暖暖']
   let serverSettings = DEFAULT_SERVER_SETTINGS
+  let pushReminderHours = 168
   let highValueOnly = false
   try {
     const raw = localStorage.getItem(PREFS_KEY)
     if (raw) {
       const p = JSON.parse(raw) as {
         preferredGames?: string[]
+        pushReminderHours?: number
         highValueOnly?: boolean
       }
       if (Array.isArray(p.preferredGames)) preferredGames = p.preferredGames
+      if (typeof p.pushReminderHours === 'number') {
+        const v = p.pushReminderHours
+        pushReminderHours = v === 0 || v === -1 ? -1 : v === 24 || v === 72 || v === 168 ? v : 168
+      }
       if (typeof p.highValueOnly === 'boolean') highValueOnly = p.highValueOnly
     }
   } catch {
@@ -82,7 +89,12 @@ export function readUrgentBadgePrefsFromStorage(): Omit<UrgentBadgePrefs, 'claim
     /* ignore */
   }
 
-  return { preferredGames, serverSettings, highValueOnly, claimedIds }
+  return { preferredGames, serverSettings, pushReminderHours, highValueOnly, claimedIds }
+}
+
+function isWithinReminderWindow(expiryMs: number, nowMs: number, reminderHours: number): boolean {
+  if (reminderHours === -1) return true
+  return expiryMs <= nowMs + reminderHours * 3600 * 1000
 }
 
 /**
@@ -102,6 +114,7 @@ export function countUrgentUnclaimedFromList(
     if (opts.highValueOnly && !Boolean(item.diamondReward?.trim())) continue
     const expiryMs = parseExpiryMsForBadge(item.expiryAt)
     if (expiryMs === null || expiryMs <= nowMs) continue
+    if (!isWithinReminderWindow(expiryMs, nowMs, opts.pushReminderHours)) continue
     if (opts.claimedIds.has(item.id)) continue
     n += 1
   }
@@ -110,11 +123,13 @@ export function countUrgentUnclaimedFromList(
 
 /** 拉取全量「未领取」视图下的码（各游戏），再按本地偏好与已领取集合计算角标数量 */
 export async function fetchUrgentUnclaimedBadgeCount(): Promise<number> {
-  const { preferredGames, serverSettings, highValueOnly, claimedIds } = readUrgentBadgePrefsFromStorage()
+  const { preferredGames, serverSettings, pushReminderHours, highValueOnly, claimedIds } =
+    readUrgentBadgePrefsFromStorage()
   const codes = await listCodes('未领取')
   return countUrgentUnclaimedFromList(codes, {
     preferredGames,
     serverSettings,
+    pushReminderHours,
     highValueOnly,
     claimedIds,
   })
