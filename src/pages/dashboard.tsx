@@ -114,6 +114,17 @@ function getDefaultServerByGame(gameName: string): string {
   return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
 }
 
+function syncServerSettingsToServiceWorker(settings: ServerSettings) {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+  const payload = { type: 'SYNC_SERVER_SETTINGS', payload: settings }
+  navigator.serviceWorker.controller?.postMessage(payload)
+  void navigator.serviceWorker.ready.then((reg) => {
+    reg.active?.postMessage(payload)
+    reg.waiting?.postMessage(payload)
+    reg.installing?.postMessage(payload)
+  })
+}
+
 export default function Dashboard() {
   const [selectedGame, setSelectedGame] = useState<string>('未领取')
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'unsupported'>('default')
@@ -195,6 +206,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     localStorage.setItem(SERVER_SETTINGS_KEY, JSON.stringify(serverSettings))
+    syncServerSettingsToServiceWorker(serverSettings)
   }, [serverSettings])
 
   useEffect(() => {

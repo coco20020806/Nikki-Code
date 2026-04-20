@@ -81,6 +81,8 @@ type PushPayloadFields = {
   icon?: string
   badge?: string
   badgeCount?: number
+  gameName?: string
+  server?: string
 }
 
 function buildStandardPushPayload(overrides?: PushPayloadFields): string {
@@ -91,6 +93,8 @@ function buildStandardPushPayload(overrides?: PushPayloadFields): string {
     url: o.url ?? '/',
     icon: o.icon ?? DEFAULT_ICON,
     badge: o.badge ?? DEFAULT_ICON,
+    gameName: o.gameName,
+    server: o.server,
     badgeCount:
       typeof o.badgeCount === 'number' && Number.isFinite(o.badgeCount) ? Math.floor(o.badgeCount) : 1,
   })
@@ -98,6 +102,8 @@ function buildStandardPushPayload(overrides?: PushPayloadFields): string {
 
 type CodeRow = {
   id: number
+  game_name: string
+  server: string | null
   code_text: string
   expiry_at: string
   reminder_hours: number | null
@@ -186,7 +192,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: codeRows, error: codesError } = await supabase
     .from('codes')
-    .select('id, code_text, expiry_at, reminder_hours')
+    .select('id, game_name, server, code_text, expiry_at, reminder_hours')
     .eq('is_invalid', false)
     .not('expiry_at', 'is', null)
 
@@ -292,6 +298,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body,
         url: '/',
         badgeCount,
+        // 供 Service Worker 按本地区服偏好做二次过滤
+        gameName: code.game_name,
+        server: code.server ?? undefined,
       })
 
       try {

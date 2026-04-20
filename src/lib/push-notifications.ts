@@ -71,7 +71,7 @@ export async function subscribePushAndPersist(reminderHours = 168): Promise<bool
   return true
 }
 
-/** 管理员「新码上线全服通知」API（POST + 管理员密码；路由仍为 api/push-test） */
-export function getBroadcastPushApiUrl(): string {
-  return new URL('api/push-test', `${window.location.origin}${import.meta.env.BASE_URL || '/'}`).toString()
+/** 管理员「按兑换码精准推送」API（POST + 管理员密码） */
+export function getCodePushApiUrl(): string {
+  return new URL('api/send-push', `${window.location.origin}${import.meta.env.BASE_URL || '/'}`).toString()
 }

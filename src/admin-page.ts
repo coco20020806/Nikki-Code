@@ -1,6 +1,6 @@
 import './index.css'
 import { registerNikkiServiceWorker } from '@/lib/register-sw'
-import { getBroadcastPushApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
+import { getCodePushApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import {
   type AdminCodeWithReports,
   addCode,
@@ -91,20 +91,6 @@ root.innerHTML = `
         <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">确认上线</button>
       </form>
       <p id="status" style="margin-top:10px;"></p>
-      <div id="broadcast-push-card" style="margin-top:22px;padding:18px;border-radius:18px;border:1px solid rgba(244,114,182,0.45);background:linear-gradient(145deg,rgba(253,242,248,0.96),rgba(252,231,243,0.9));box-shadow:0 10px 32px rgba(236,72,153,0.14);">
-        <div style="display:flex;align-items:flex-start;gap:12px;">
-          <span style="font-size:28px;line-height:1;flex-shrink:0;" aria-hidden="true">📢</span>
-          <div style="flex:1;min-width:0;">
-            <h2 style="margin:0 0 6px;font-size:17px;font-weight:800;color:hsl(var(--foreground));letter-spacing:-0.02em;">新码上线 · 全服广播</h2>
-            <p style="margin:0 0 14px;font-size:12px;line-height:1.55;color:hsl(var(--muted-foreground));">从 Supabase <code style="font-size:11px;">push_subscriptions</code> 读取<strong>全部</strong>订阅并发送正式「新码上线」通知。需在服务端配置 VAPID 与 <code style="font-size:11px;">SUPABASE_SERVICE_ROLE_KEY</code>。</p>
-            <button id="broadcast-push-btn" type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 22px;border:none;border-radius:999px;background:linear-gradient(135deg,hsl(var(--primary)),#db2777);color:white;font-weight:700;cursor:pointer;font-size:14px;box-shadow:0 8px 26px rgba(219,39,119,0.38);">
-              <span style="font-size:18px;line-height:1;" aria-hidden="true">📢</span>
-              <span id="broadcast-push-btn-label">发布新码全服通知</span>
-            </button>
-          </div>
-        </div>
-        <p id="broadcast-push-msg" style="margin:14px 0 0;font-size:12px;color:hsl(var(--muted-foreground));min-height:1.2em;"></p>
-      </div>
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
       <h2 style="margin:0 0 12px;font-size:24px;">进行中兑换码</h2>
@@ -210,9 +196,6 @@ const aiDropzone = document.getElementById('ai-dropzone') as HTMLDivElement
 const aiExtractBtn = document.getElementById('ai-extract-btn') as HTMLButtonElement
 const aiStatus = document.getElementById('ai-status') as HTMLParagraphElement
 const pendingListWrap = document.getElementById('pending-list') as HTMLDivElement
-const broadcastPushBtn = document.getElementById('broadcast-push-btn') as HTMLButtonElement | null
-const broadcastPushBtnLabel = document.getElementById('broadcast-push-btn-label') as HTMLSpanElement | null
-const broadcastPushMsg = document.getElementById('broadcast-push-msg') as HTMLParagraphElement | null
 const adminToastEl = document.getElementById('admin-toast') as HTMLDivElement | null
 
 let adminToastTimer: ReturnType<typeof setTimeout> | null = null
@@ -549,6 +532,9 @@ function renderActiveList() {
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+            <button type="button" data-action="push" data-id="${code.id}" style="border:1px solid rgba(219,39,119,0.35);background:#fff;color:#be185d;border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:13px;">
+              📣 推送此码
+            </button>
             <button type="button" data-action="edit" data-id="${code.id}" style="border:1px solid hsl(var(--border));background:#fff;color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;">
               编辑
             </button>
@@ -759,8 +745,57 @@ const handleDeleteClick = async (btn: HTMLButtonElement) => {
   }
 }
 
+const handlePushCodeClick = async (btn: HTMLButtonElement) => {
+  const id = Number(btn.getAttribute('data-id') ?? 0)
+  if (!id) return
+  const code = cachedActiveRows.find((x) => x.id === id)
+  if (!code) return
+
+  const password = getAdminPassword()
+  if (!password.trim()) {
+    status.textContent = '请输入管理员密码后再推送'
+    status.style.color = '#e11d48'
+    return
+  }
+
+  const ok = window.confirm(`确认向订阅用户推送该兑换码？\n${code.gameName} / ${adminServerLabel(code.server || defaultServerByGame(code.gameName))} / ${code.codeText}`)
+  if (!ok) return
+
+  status.textContent = '推送中...'
+  status.style.color = 'hsl(var(--muted-foreground))'
+
+  try {
+    const res = await fetch(getCodePushApiUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password,
+        gameName: code.gameName,
+        server: code.server || defaultServerByGame(code.gameName),
+        codeText: code.codeText,
+      }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { error?: string; sent?: number; failed?: number; total?: number }
+    if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`)
+    const sent = data.sent ?? 0
+    const failed = data.failed ?? 0
+    const total = data.total ?? 0
+    status.textContent = `推送完成：共 ${total} 条，成功 ${sent}，失败 ${failed}`
+    status.style.color = '#15803d'
+    showAdminToast(`该码推送完成：成功 ${sent} 条`)
+  } catch (err) {
+    status.textContent = err instanceof Error ? err.message : '推送失败'
+    status.style.color = '#e11d48'
+  }
+}
+
 listActiveWrap.addEventListener('click', async (e) => {
   const target = e.target as HTMLElement | null
+  const pushBtn = target?.closest('button[data-action="push"]') as HTMLButtonElement | null
+  if (pushBtn) {
+    await handlePushCodeClick(pushBtn)
+    return
+  }
   const editBtn = target?.closest('button[data-action="edit"]') as HTMLButtonElement | null
   if (editBtn) {
     const id = Number(editBtn.getAttribute('data-id') ?? 0)
@@ -1113,72 +1148,6 @@ editSaveBtn.addEventListener('click', async () => {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && editModal.style.display === 'flex') closeEditModal()
-})
-
-broadcastPushBtn?.addEventListener('click', async () => {
-  if (!broadcastPushMsg || !broadcastPushBtn || !broadcastPushBtnLabel) return
-
-  const password = getAdminPassword()
-  if (!password) {
-    broadcastPushMsg.textContent = '请先输入管理员密码'
-    broadcastPushMsg.style.color = '#e11d48'
-    return
-  }
-
-  const ok = window.confirm(
-    '确定要给所有订阅用户发送「新码上线」通知吗？此操作不可撤销。',
-  )
-  if (!ok) return
-
-  broadcastPushMsg.textContent = ''
-  broadcastPushBtn.disabled = true
-  broadcastPushBtn.style.opacity = '0.88'
-  broadcastPushBtn.style.cursor = 'wait'
-  broadcastPushBtnLabel.textContent = '发送中…'
-
-  try {
-    const res = await fetch(getBroadcastPushApiUrl(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    const data = (await res.json().catch(() => ({}))) as {
-      error?: string
-      ok?: boolean
-      total?: number
-      sent?: number
-      failed?: number
-    }
-    if (!res.ok) {
-      broadcastPushMsg.textContent = data.error || `请求失败（${res.status}）`
-      broadcastPushMsg.style.color = '#e11d48'
-      return
-    }
-    const total = data.total ?? 0
-    const sent = data.sent ?? 0
-    const failed = data.failed ?? 0
-
-    if (total === 0) {
-      broadcastPushMsg.textContent = '当前没有任何订阅记录（请确认用户已在 PWA 中开启推送）。'
-      broadcastPushMsg.style.color = 'hsl(var(--muted-foreground))'
-      showAdminToast('当前暂无已订阅用户')
-    } else {
-      broadcastPushMsg.textContent =
-        failed > 0
-          ? `已处理 ${total} 条订阅：成功 ${sent}，失败 ${failed}。`
-          : `已向全部 ${sent} 条订阅发送完毕。`
-      broadcastPushMsg.style.color = '#15803d'
-      showAdminToast(`成功向 ${sent} 位用户发送了通知`)
-    }
-  } catch (e) {
-    broadcastPushMsg.textContent = e instanceof Error ? e.message : '发送失败'
-    broadcastPushMsg.style.color = '#e11d48'
-  } finally {
-    broadcastPushBtn.disabled = false
-    broadcastPushBtn.style.opacity = ''
-    broadcastPushBtn.style.cursor = ''
-    broadcastPushBtnLabel.textContent = '发布新码全服通知'
-  }
 })
 
 renderAuthState()

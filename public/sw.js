@@ -17,8 +17,52 @@ self.addEventListener('install', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     void self.skipWaiting()
+    return
+  }
+  if (event.data && event.data.type === 'SYNC_SERVER_SETTINGS') {
+    const payload = event.data.payload
+    void saveServerSettings(payload)
   }
 })
+
+async function saveServerSettings(settings) {
+  const cache = await caches.open('nikki-runtime')
+  await cache.put(
+    new Request('https://nikki.local/__server_settings__'),
+    new Response(JSON.stringify(settings ?? {}), {
+      headers: { 'content-type': 'application/json' },
+    }),
+  )
+}
+
+async function readServerSettings() {
+  try {
+    const cache = await caches.open('nikki-runtime')
+    const resp = await cache.match(new Request('https://nikki.local/__server_settings__'))
+    if (!resp) return null
+    return await resp.json()
+  } catch (_) {
+    return null
+  }
+}
+
+function defaultServerByGame(gameName) {
+  return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
+}
+
+function shouldNotifyByServerPreference(settings, gameName, server) {
+  if (!gameName) return true
+  const currentServer = server || defaultServerByGame(gameName)
+  if (gameName === '闪耀暖暖') {
+    const list = Array.isArray(settings?.shining) ? settings.shining : ['SN_CN']
+    return list.includes(currentServer)
+  }
+  if (gameName === '无限暖暖') {
+    const list = Array.isArray(settings?.infinity) ? settings.infinity : ['IN_CN']
+    return list.includes(currentServer)
+  }
+  return true
+}
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -58,6 +102,13 @@ self.addEventListener('push', (event) => {
       const url = data.url ? String(data.url) : '/'
       const icon = (data.icon && String(data.icon).trim()) || '/apple-touch-icon.png'
       const badgeImg = (data.badge && String(data.badge).trim()) || icon
+      const gameName = data.gameName ? String(data.gameName) : ''
+      const server = data.server ? String(data.server) : ''
+
+      const settings = await readServerSettings()
+      if (!shouldNotifyByServerPreference(settings, gameName, server)) {
+        return
+      }
 
       const showP = self.registration.showNotification(title, {
         body,
