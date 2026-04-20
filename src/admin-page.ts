@@ -108,6 +108,14 @@ root.innerHTML = `
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
       <h2 style="margin:0 0 12px;font-size:24px;">进行中兑换码</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+        <select id="filter-game" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;">
+          <option value="全部">全部</option>
+          <option value="闪耀暖暖">闪耀暖暖</option>
+          <option value="无限暖暖">无限暖暖</option>
+        </select>
+        <select id="filter-server" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;"></select>
+      </div>
       <div id="list-active"></div>
       <div style="margin-top:14px;border-top:1px solid hsl(var(--border));padding-top:12px;">
         <button id="toggle-expired-btn" type="button" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid hsl(var(--border));background:#fff;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;">
@@ -174,6 +182,8 @@ root.innerHTML = `
 const form = document.getElementById('code-form') as HTMLFormElement
 const status = document.getElementById('status') as HTMLParagraphElement
 const listActiveWrap = document.getElementById('list-active') as HTMLDivElement
+const filterGameInput = document.getElementById('filter-game') as HTMLSelectElement
+const filterServerInput = document.getElementById('filter-server') as HTMLSelectElement
 const listExpiredWrap = document.getElementById('list-expired') as HTMLDivElement
 const toggleExpiredBtn = document.getElementById('toggle-expired-btn') as HTMLButtonElement
 const expiredTitle = document.getElementById('expired-title') as HTMLSpanElement
@@ -235,6 +245,8 @@ let currentImageBase64 = ''
 let showExpired = false
 let cachedExpiredRows: AdminCodeWithReports[] = []
 let cachedActiveRows: AdminCodeWithReports[] = []
+let filterGame = '全部'
+let filterServer = 'ALL'
 let pendingItems: Array<{
   id: string
   gameName: string
@@ -258,6 +270,43 @@ function renderServerOptions(selectEl: HTMLSelectElement, gameName: string, pref
     .map((item) => `<option value="${item.value}">${item.label}</option>`)
     .join('')
   selectEl.value = keep ? preferredValue : options[0].value
+}
+
+function adminServerLabel(server: string): string {
+  const all = [
+    ...SERVER_OPTIONS['闪耀暖暖'],
+    ...SERVER_OPTIONS['无限暖暖'],
+  ]
+  const found = all.find((item) => item.value === server)
+  return found?.label ?? server
+}
+
+function renderFilterServerOptions() {
+  let options: Array<{ value: string; label: string }> = [{ value: 'ALL', label: '全部区服' }]
+  if (filterGame === '闪耀暖暖') {
+    options = [
+      ...options,
+      ...SERVER_OPTIONS['闪耀暖暖'].map((item) => ({ value: item.value, label: item.label })),
+    ]
+  } else if (filterGame === '无限暖暖') {
+    options = [
+      ...options,
+      ...SERVER_OPTIONS['无限暖暖'].map((item) => ({ value: item.value, label: item.label })),
+    ]
+  } else {
+    options = [
+      ...options,
+      ...SERVER_OPTIONS['闪耀暖暖'].map((item) => ({ value: item.value, label: item.label })),
+      ...SERVER_OPTIONS['无限暖暖'].map((item) => ({ value: item.value, label: item.label })),
+    ]
+  }
+  filterServerInput.innerHTML = options
+    .map((item) => `<option value="${item.value}">${item.label}</option>`)
+    .join('')
+  if (!options.some((item) => item.value === filterServer)) {
+    filterServer = 'ALL'
+  }
+  filterServerInput.value = filterServer
 }
 
 function flashField(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
@@ -469,33 +518,24 @@ function diamondSvg() {
   `
 }
 
-async function refreshList() {
-  try {
-    const pwd = getAdminPassword()
-    const rows: AdminCodeWithReports[] = verifyAdminPassword(pwd)
-      ? await fetchAdminCodesWithReports(pwd)
-      : (await listCodes()).map((c) => ({ ...c, reportCount: 0, reportTypeLabels: [] as string[] }))
+function renderActiveList() {
+  const filteredRows = cachedActiveRows.filter((code) => {
+    if (filterGame !== '全部' && code.gameName !== filterGame) return false
+    if (filterServer !== 'ALL' && (code.server || defaultServerByGame(code.gameName)) !== filterServer) return false
+    return true
+  })
 
-    const now = Date.now()
-    const activeRaw = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
-    const expiredRaw = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
-    const activeRows = sortCodesWithReportsFirst(activeRaw)
-    cachedExpiredRows = sortCodesWithReportsFirst(expiredRaw)
-    cachedActiveRows = activeRows
-
-    expiredTitle.textContent = `查看已过期的兑换码 (${cachedExpiredRows.length})`
-
-    listActiveWrap.innerHTML = activeRows
-      .slice(0, 20)
-      .map(
-        (code) => `
+  listActiveWrap.innerHTML = filteredRows
+    .slice(0, 80)
+    .map(
+      (code) => `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid hsl(var(--border));">
           <div style="min-width:0;flex:1;">
             <div style="font-weight:600;">
               ${code.gameName} - <code>${code.codeText}</code>${reportBadgeHtml(code)}
             </div>
             <div style="margin-top:6px;font-size:12px;color:hsl(var(--muted-foreground));line-height:1.5;">
-              区服: ${code.server || '默认'}<br/>
+              区服: ${adminServerLabel(code.server || defaultServerByGame(code.gameName))}<br/>
               过期: ${code.expiryAt ? format(new Date(code.expiryAt), 'yyyy-MM-dd HH:mm') : '永久'}
               ${
                 code.diamondReward
@@ -518,11 +558,29 @@ async function refreshList() {
           </div>
         </div>
       `,
-      )
-      .join('')
-    if (!activeRows.length) {
-      listActiveWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">暂无进行中的兑换码。</p>`
-    }
+    )
+    .join('')
+  if (!filteredRows.length) {
+    listActiveWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">当前筛选条件下暂无进行中的兑换码。</p>`
+  }
+}
+
+async function refreshList() {
+  try {
+    const pwd = getAdminPassword()
+    const rows: AdminCodeWithReports[] = verifyAdminPassword(pwd)
+      ? await fetchAdminCodesWithReports(pwd)
+      : (await listCodes()).map((c) => ({ ...c, reportCount: 0, reportTypeLabels: [] as string[] }))
+
+    const now = Date.now()
+    const activeRaw = rows.filter((code) => !(code.expiryAt && new Date(code.expiryAt).getTime() < now))
+    const expiredRaw = rows.filter((code) => code.expiryAt && new Date(code.expiryAt).getTime() < now)
+    const activeRows = sortCodesWithReportsFirst(activeRaw)
+    cachedExpiredRows = sortCodesWithReportsFirst(expiredRaw)
+    cachedActiveRows = activeRows
+
+    expiredTitle.textContent = `查看已过期的兑换码 (${cachedExpiredRows.length})`
+    renderActiveList()
 
     if (showExpired) renderExpiredList()
   } catch (err) {
@@ -790,6 +848,17 @@ form.addEventListener('input', () => {
 
 gameNameInput.addEventListener('change', () => {
   renderServerOptions(serverInput, gameNameInput.value)
+})
+
+filterGameInput.addEventListener('change', () => {
+  filterGame = filterGameInput.value
+  renderFilterServerOptions()
+  renderActiveList()
+})
+
+filterServerInput.addEventListener('change', () => {
+  filterServer = filterServerInput.value
+  renderActiveList()
 })
 
 setEndOfDayBtn.addEventListener('click', () => {
@@ -1120,6 +1189,7 @@ expiryMinuteInput.value = '59'
 editExpiryHourInput.value = '23'
 editExpiryMinuteInput.value = '59'
 renderServerOptions(serverInput, gameNameInput.value)
+renderFilterServerOptions()
 renderPendingList()
 void refreshList()
 void refreshSubmissions()
