@@ -36,12 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       password?: string
       gameName?: string
       server?: string
-      codeText?: string
     }
     const password = String(body.password ?? '').trim()
     const gameName = String(body.gameName ?? '').trim()
     const server = String(body.server ?? '').trim()
-    const codeText = String(body.codeText ?? '').trim()
 
     if (!verifyAdminPassword(password)) {
       return res.status(401).json({ error: 'Unauthorized' })
@@ -79,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const payload = JSON.stringify({
       title: '新兑换码上线啦！',
-      body: `你关注的 ${serverLabel(server)} 有新的福利，快来领取吧~${codeText ? `（${codeText}）` : ''}`,
+      body: `你关注的 ${serverLabel(server)} 有新的福利，快来领取吧~`,
       gameName,
       server,
       url: '/',
