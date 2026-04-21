@@ -129,6 +129,7 @@ function syncServerSettingsToServiceWorker(settings: ServerSettings) {
 
 export default function Dashboard() {
   const [selectedGame, setSelectedGame] = useState<string>('未领取')
+  const [currentSubFilter, setCurrentSubFilter] = useState<string>('ALL')
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'unsupported'>('default')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
@@ -305,6 +306,11 @@ export default function Dashboard() {
         return expiryMs === null || expiryMs > nowMs
       })
       .filter((item) => (selectedGame === '未领取' ? !claimedIds.has(item.id) : true))
+      .filter((item) => {
+        if (currentSubFilter === 'ALL') return true
+        const server = item.server || getDefaultServerByGame(item.gameName)
+        return server === currentSubFilter
+      })
 
     return list.sort((a, b) => {
       const aClaimed = claimedIds.has(a.id)
@@ -318,7 +324,30 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings])
+  }, [claimedIds, codes, currentSubFilter, preferredGames, highValueOnly, selectedGame, serverSettings])
+
+  const currentViewServerCodes = useMemo(() => {
+    if (selectedGame === '闪耀暖暖') return [...new Set(serverSettings.shining)]
+    if (selectedGame === '无限暖暖') return [...new Set(serverSettings.infinity)]
+
+    const all = new Set<string>()
+    if (preferredGames.includes('闪耀暖暖')) {
+      serverSettings.shining.forEach((code) => all.add(code))
+    }
+    if (preferredGames.includes('无限暖暖')) {
+      serverSettings.infinity.forEach((code) => all.add(code))
+    }
+    return [...all]
+  }, [preferredGames, selectedGame, serverSettings])
+
+  const showSubFilterBar = currentViewServerCodes.length > 1
+
+  useEffect(() => {
+    if (currentSubFilter === 'ALL') return
+    if (!currentViewServerCodes.includes(currentSubFilter)) {
+      setCurrentSubFilter('ALL')
+    }
+  }, [currentSubFilter, currentViewServerCodes])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -561,7 +590,10 @@ export default function Dashboard() {
         {GAME_FILTERS.map((game) => (
           <button
             key={game}
-            onClick={() => setSelectedGame(game)}
+            onClick={() => {
+              setSelectedGame(game)
+              setCurrentSubFilter('ALL')
+            }}
             className={`rounded-full border px-5 py-2.5 text-sm font-medium whitespace-nowrap transition-all duration-300 active:scale-[0.98] ${
               selectedGame === game
                 ? 'border-transparent bg-foreground text-background shadow-sm shadow-foreground/10'
@@ -572,6 +604,32 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      {showSubFilterBar ? (
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setCurrentSubFilter('ALL')}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+              currentSubFilter === 'ALL' ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            全部
+          </button>
+          {currentViewServerCodes.map((serverCode) => (
+            <button
+              key={serverCode}
+              type="button"
+              onClick={() => setCurrentSubFilter(serverCode)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                currentSubFilter === serverCode ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {SERVER_LABEL_MAP[serverCode] || serverCode}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="glass-card mb-6 flex items-center gap-2 rounded-2xl px-4 py-3 text-sm text-muted-foreground">
         <span>💡</span>
