@@ -116,6 +116,11 @@ function getDefaultServerByGame(gameName: string): string {
   return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
 }
 
+function getServerFilterLabel(serverCode: string): string {
+  if (serverCode === 'SN_GL' || serverCode === 'IN_GL') return '国际服'
+  return SERVER_LABEL_MAP[serverCode] || serverCode
+}
+
 function syncServerSettingsToServiceWorker(settings: ServerSettings) {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
   const payload = { type: 'SYNC_SERVER_SETTINGS', payload: settings }
@@ -315,17 +320,39 @@ export default function Dashboard() {
       const serverCode = item.server || getDefaultServerByGame(item.gameName)
       const key = `${item.gameName}__${serverCode}`
       if (grouped.has(key)) continue
-      const serverLabel = SERVER_LABEL_MAP[serverCode] || serverCode
+      const serverLabel = getServerFilterLabel(serverCode)
       grouped.set(key, { key, label: `${item.gameName} - ${serverLabel}` })
     }
     return [...grouped.values()]
   }, [baseFilteredCodes, selectedGame])
 
+  const gameTabServerFilters = useMemo(() => {
+    if (selectedGame === '闪耀暖暖') {
+      return [...new Set(serverSettings.shining)].map((serverCode) => ({
+        key: serverCode,
+        label: getServerFilterLabel(serverCode),
+      }))
+    }
+    if (selectedGame === '无限暖暖') {
+      return [...new Set(serverSettings.infinity)].map((serverCode) => ({
+        key: serverCode,
+        label: getServerFilterLabel(serverCode),
+      }))
+    }
+    return []
+  }, [selectedGame, serverSettings])
+
+  const activeSubFilters = selectedGame === '未领取' ? unclaimedGameServerFilters : gameTabServerFilters
+
   const sortedCodes = useMemo(() => {
     const list = baseFilteredCodes.filter((item) => {
-      if (selectedGame !== '未领取' || currentSubFilter === 'ALL') return true
+      if (currentSubFilter === 'ALL') return true
+      if (selectedGame === '未领取') {
+        const serverCode = item.server || getDefaultServerByGame(item.gameName)
+        return `${item.gameName}__${serverCode}` === currentSubFilter
+      }
       const serverCode = item.server || getDefaultServerByGame(item.gameName)
-      return `${item.gameName}__${serverCode}` === currentSubFilter
+      return serverCode === currentSubFilter
     })
     return list.sort((a, b) => {
       const aClaimed = claimedIds.has(a.id)
@@ -341,14 +368,14 @@ export default function Dashboard() {
     })
   }, [baseFilteredCodes, claimedIds, currentSubFilter, selectedGame])
 
-  const showSubFilterBar = selectedGame === '未领取' && unclaimedGameServerFilters.length > 1
+  const showSubFilterBar = activeSubFilters.length > 1
 
   useEffect(() => {
     if (currentSubFilter === 'ALL') return
-    if (!unclaimedGameServerFilters.some((item) => item.key === currentSubFilter)) {
+    if (!activeSubFilters.some((item) => item.key === currentSubFilter)) {
       setCurrentSubFilter('ALL')
     }
-  }, [currentSubFilter, unclaimedGameServerFilters])
+  }, [activeSubFilters, currentSubFilter])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -619,7 +646,7 @@ export default function Dashboard() {
           >
             全部
           </button>
-          {unclaimedGameServerFilters.map((filterItem) => (
+          {activeSubFilters.map((filterItem) => (
             <button
               key={filterItem.key}
               type="button"
