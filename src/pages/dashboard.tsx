@@ -286,13 +286,13 @@ export default function Dashboard() {
     })()
   }, [])
 
-  const sortedCodes = useMemo(() => {
+  const baseFilteredCodes = useMemo(() => {
     const nowMs = Date.now()
     const selectedServers = {
       闪耀暖暖: new Set(serverSettings.shining),
       无限暖暖: new Set(serverSettings.infinity),
     }
-    const list = [...codes]
+    return [...codes]
       .filter((item) => preferredGames.includes(item.gameName))
       .filter((item) => {
         const gameServers = selectedServers[item.gameName as '闪耀暖暖' | '无限暖暖']
@@ -306,11 +306,30 @@ export default function Dashboard() {
         return expiryMs === null || expiryMs > nowMs
       })
       .filter((item) => (selectedGame === '未领取' ? !claimedIds.has(item.id) : true))
-      .filter((item) => {
-        if (currentSubFilter === 'ALL') return true
-        const server = item.server || getDefaultServerByGame(item.gameName)
-        return server === currentSubFilter
+  }, [claimedIds, codes, preferredGames, highValueOnly, selectedGame, serverSettings])
+
+  const unclaimedGameServerFilters = useMemo(() => {
+    if (selectedGame !== '未领取') return []
+    const grouped = new Map<string, { key: string; label: string }>()
+    for (const item of baseFilteredCodes) {
+      const serverCode = item.server || getDefaultServerByGame(item.gameName)
+      const key = `${item.gameName}__${serverCode}`
+      if (grouped.has(key)) continue
+      const serverLabel = SERVER_LABEL_MAP[serverCode] || serverCode
+      grouped.set(key, {
+        key,
+        label: `[${item.gameName}] - [${serverLabel}]`,
       })
+    }
+    return [...grouped.values()]
+  }, [baseFilteredCodes, selectedGame])
+
+  const sortedCodes = useMemo(() => {
+    const list = baseFilteredCodes.filter((item) => {
+      if (selectedGame !== '未领取' || currentSubFilter === 'ALL') return true
+      const serverCode = item.server || getDefaultServerByGame(item.gameName)
+      return `${item.gameName}__${serverCode}` === currentSubFilter
+    })
 
     return list.sort((a, b) => {
       const aClaimed = claimedIds.has(a.id)
@@ -324,30 +343,17 @@ export default function Dashboard() {
       if (b.expiryAt) return 1
       return 0
     })
-  }, [claimedIds, codes, currentSubFilter, preferredGames, highValueOnly, selectedGame, serverSettings])
+  }, [baseFilteredCodes, claimedIds, currentSubFilter, selectedGame])
 
-  const currentViewServerCodes = useMemo(() => {
-    if (selectedGame === '闪耀暖暖') return [...new Set(serverSettings.shining)]
-    if (selectedGame === '无限暖暖') return [...new Set(serverSettings.infinity)]
-
-    const all = new Set<string>()
-    if (preferredGames.includes('闪耀暖暖')) {
-      serverSettings.shining.forEach((code) => all.add(code))
-    }
-    if (preferredGames.includes('无限暖暖')) {
-      serverSettings.infinity.forEach((code) => all.add(code))
-    }
-    return [...all]
-  }, [preferredGames, selectedGame, serverSettings])
-
-  const showSubFilterBar = currentViewServerCodes.length > 1
+  const showSubFilterBar = selectedGame === '未领取' && unclaimedGameServerFilters.length > 1
 
   useEffect(() => {
     if (currentSubFilter === 'ALL') return
-    if (!currentViewServerCodes.includes(currentSubFilter)) {
+    const exists = unclaimedGameServerFilters.some((item) => item.key === currentSubFilter)
+    if (!exists) {
       setCurrentSubFilter('ALL')
     }
-  }, [currentSubFilter, currentViewServerCodes])
+  }, [currentSubFilter, unclaimedGameServerFilters])
 
   const togglePreferredGame = (game: string, checked: boolean) => {
     setPreferredGames((prev) => {
@@ -611,21 +617,21 @@ export default function Dashboard() {
             type="button"
             onClick={() => setCurrentSubFilter('ALL')}
             className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
-              currentSubFilter === 'ALL' ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
+              currentSubFilter === 'ALL' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500'
             }`}
           >
             全部
           </button>
-          {currentViewServerCodes.map((serverCode) => (
+          {unclaimedGameServerFilters.map((filterItem) => (
             <button
-              key={serverCode}
+              key={filterItem.key}
               type="button"
-              onClick={() => setCurrentSubFilter(serverCode)}
+              onClick={() => setCurrentSubFilter(filterItem.key)}
               className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
-                currentSubFilter === serverCode ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500'
+                currentSubFilter === filterItem.key ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500'
               }`}
             >
-              {SERVER_LABEL_MAP[serverCode] || serverCode}
+              {filterItem.label}
             </button>
           ))}
         </div>
