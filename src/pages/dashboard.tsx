@@ -2,16 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
-  ChevronDown,
-  ChevronUp,
-  Heart,
   HelpCircle,
   Loader2,
-  MessageCircleMore,
   MessageSquare,
   Send,
   Settings,
-  WalletCards,
   X,
 } from 'lucide-react'
 import { CodeCard } from '@/components/code-card'
@@ -140,9 +135,6 @@ export default function Dashboard() {
   const [guideOpen, setGuideOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [supportOpen, setSupportOpen] = useState(false)
-  const [supportTab, setSupportTab] = useState<'coffee' | 'postcard'>('coffee')
-  const [supportPayMethod, setSupportPayMethod] = useState<'wechat' | 'alipay'>('wechat')
-  const [supportQrExpanded, setSupportQrExpanded] = useState(false)
   const [feedbackContent, setFeedbackContent] = useState('')
   const [sendingFeedback, setSendingFeedback] = useState(false)
   const [postcardPreview, setPostcardPreview] = useState('')
@@ -249,15 +241,8 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!supportOpen) {
-      setSupportQrExpanded(false)
-      setPostcardNickname('')
-    }
+    if (!supportOpen) setPostcardNickname('')
   }, [supportOpen])
-
-  useEffect(() => {
-    if (supportTab !== 'coffee') setSupportQrExpanded(false)
-  }, [supportTab])
 
   useEffect(() => {
     setPostcardLightboxLoaded(false)
@@ -551,14 +536,6 @@ export default function Dashboard() {
           >
             <MessageSquare className="h-4 w-4" />
             <span className="hidden sm:inline">投稿/反馈</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSupportOpen(true)}
-            className="flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-muted-foreground transition-all hover:bg-black/5 hover:text-foreground"
-          >
-            <Heart className="h-4 w-4" />
-            <span className="hidden sm:inline">赞助/投喂</span>
           </button>
           <button
             type="button"
@@ -996,109 +973,28 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
           <div className="glass-card max-h-[min(90dvh,640px)] w-full max-w-xl overflow-y-auto overscroll-contain rounded-3xl p-5 sm:p-6">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-xl font-bold">支持作者</h3>
+              <h3 className="text-xl font-bold">投喂照片</h3>
               <button type="button" onClick={() => setSupportOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
                 关闭
               </button>
             </div>
-
-            <div className="mb-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setSupportTab('coffee')}
-                className={`rounded-xl px-4 py-2 text-sm font-bold ${supportTab === 'coffee' ? 'bg-foreground text-background' : 'bg-white text-muted-foreground'}`}
-              >
-                投喂体力药水
-              </button>
-              <button
-                type="button"
-                onClick={() => setSupportTab('postcard')}
-                className={`rounded-xl px-4 py-2 text-sm font-bold ${supportTab === 'postcard' ? 'bg-foreground text-background' : 'bg-white text-muted-foreground'}`}
-              >
-                投喂精美明信片
-              </button>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">传一张你最得意的女儿截图，和大家分享你的搭配吧！</p>
+              <input type="file" accept="image/*" onChange={handleSelectPostcard} className="block w-full rounded-xl border border-input bg-white p-2" />
+              {postcardPreview ? <img src={postcardPreview} alt="预览" className="max-h-56 w-full rounded-2xl object-cover" /> : null}
+              <input
+                type="text"
+                value={postcardNickname}
+                onChange={(e) => setPostcardNickname(e.target.value)}
+                maxLength={48}
+                placeholder="留下你的昵称吧 (可选)"
+                className="h-11 w-full rounded-xl border border-input bg-white px-4 text-sm placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-primary/40 focus:outline-none"
+              />
+              <Button type="button" onClick={handleSubmitPostcard} disabled={uploadingPostcard}>
+                {uploadingPostcard ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传投喂照片'}
+              </Button>
+              <p className="text-xs text-muted-foreground">上传的照片经作者审核后，有可能会展示给其他使用这个工具的玩家哦。</p>
             </div>
-
-            {supportTab === 'coffee' ? (
-              <div className="space-y-4 text-sm">
-                <h4 className="text-base font-bold text-foreground">打赏作者（服务器也是要烧钱的呜呜）</h4>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSupportPayMethod('wechat')}
-                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white shadow-sm transition-all active:scale-95 sm:px-4 ${
-                      supportPayMethod === 'wechat'
-                        ? 'bg-[#07C160] shadow-[#07C160]/35 ring-2 ring-[#07C160]/30'
-                        : 'bg-[#07C160] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[#07C160]/40'
-                    }`}
-                  >
-                    <MessageCircleMore className="h-4 w-4 shrink-0" />
-                    微信支付
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSupportPayMethod('alipay')}
-                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white shadow-sm transition-all active:scale-95 sm:px-4 ${
-                      supportPayMethod === 'alipay'
-                        ? 'bg-[#1677FF] shadow-[#1677FF]/35 ring-2 ring-[#1677FF]/30'
-                        : 'bg-[#1677FF] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[#1677FF]/40'
-                    }`}
-                  >
-                    <WalletCards className="h-4 w-4 shrink-0" />
-                    支付宝
-                  </button>
-                </div>
-                {!supportQrExpanded ? (
-                  <button
-                    type="button"
-                    onClick={() => setSupportQrExpanded(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/80 bg-white/60 py-2.5 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-white/90 active:scale-[0.98]"
-                  >
-                    <span>展开{supportPayMethod === 'wechat' ? '微信' : '支付宝'}收款码</span>
-                    <ChevronDown className="h-4 w-4 opacity-70" />
-                  </button>
-                ) : (
-                  <>
-                    <div className="mx-auto flex w-full max-w-[200px] flex-col items-center sm:max-w-[220px]">
-                      <div className="glass-card w-full overflow-hidden rounded-2xl p-2 shadow-md shadow-black/10">
-                        <img
-                          src={supportPayMethod === 'wechat' ? '/wechat.jpg' : '/alipay.jpg'}
-                          alt={supportPayMethod === 'wechat' ? '微信支付码' : '支付宝支付码'}
-                          className="mx-auto max-h-[min(38vh,200px)] w-full rounded-xl object-contain sm:max-h-[220px]"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-center text-xs text-muted-foreground/90">长按保存图片，打开 App 扫码支持作者</p>
-                    <button
-                      type="button"
-                      onClick={() => setSupportQrExpanded(false)}
-                      className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <ChevronUp className="h-3.5 w-3.5" />
-                      收起收款码
-                    </button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3 text-sm">
-                <p className="text-muted-foreground">传一张你最得意的女儿截图，给作者充充电吧！</p>
-                <input type="file" accept="image/*" onChange={handleSelectPostcard} className="block w-full rounded-xl border border-input bg-white p-2" />
-                {postcardPreview ? <img src={postcardPreview} alt="预览" className="max-h-56 w-full rounded-2xl object-cover" /> : null}
-                <input
-                  type="text"
-                  value={postcardNickname}
-                  onChange={(e) => setPostcardNickname(e.target.value)}
-                  maxLength={48}
-                  placeholder="留下你的昵称吧 (可选)"
-                  className="h-11 w-full rounded-xl border border-input bg-white px-4 text-sm placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-primary/40 focus:outline-none"
-                />
-                <Button type="button" onClick={handleSubmitPostcard} disabled={uploadingPostcard}>
-                  {uploadingPostcard ? <Loader2 className="h-4 w-4 animate-spin" /> : '上传投喂图片'}
-                </Button>
-                <p className="text-xs text-muted-foreground">上传的图片经作者审核后，有可能会展示给其他使用这个工具的玩家哦。</p>
-              </div>
-            )}
           </div>
         </div>
       ) : null}
@@ -1128,6 +1024,15 @@ export default function Dashboard() {
               </button>
             ))
           )}
+        </div>
+        <div className="mt-4 flex justify-center">
+          <Button
+            type="button"
+            onClick={() => setSupportOpen(true)}
+            className="rounded-full bg-pink-500 px-5 py-2 text-white shadow-sm shadow-pink-400/40 hover:bg-pink-500/90"
+          >
+            我也要投喂照片
+          </Button>
         </div>
       </section>
 
