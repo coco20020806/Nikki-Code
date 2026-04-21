@@ -316,10 +316,7 @@ export default function Dashboard() {
       const key = `${item.gameName}__${serverCode}`
       if (grouped.has(key)) continue
       const serverLabel = SERVER_LABEL_MAP[serverCode] || serverCode
-      grouped.set(key, {
-        key,
-        label: `[${item.gameName}] - [${serverLabel}]`,
-      })
+      grouped.set(key, { key, label: `${item.gameName} - ${serverLabel}` })
     }
     return [...grouped.values()]
   }, [baseFilteredCodes, selectedGame])
@@ -330,7 +327,6 @@ export default function Dashboard() {
       const serverCode = item.server || getDefaultServerByGame(item.gameName)
       return `${item.gameName}__${serverCode}` === currentSubFilter
     })
-
     return list.sort((a, b) => {
       const aClaimed = claimedIds.has(a.id)
       const bClaimed = claimedIds.has(b.id)
@@ -349,8 +345,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (currentSubFilter === 'ALL') return
-    const exists = unclaimedGameServerFilters.some((item) => item.key === currentSubFilter)
-    if (!exists) {
+    if (!unclaimedGameServerFilters.some((item) => item.key === currentSubFilter)) {
       setCurrentSubFilter('ALL')
     }
   }, [currentSubFilter, unclaimedGameServerFilters])
@@ -612,12 +607,14 @@ export default function Dashboard() {
       </div>
 
       {showSubFilterBar ? (
-        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="mb-7 flex items-center gap-2 overflow-x-auto pb-2">
           <button
             type="button"
             onClick={() => setCurrentSubFilter('ALL')}
             className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
-              currentSubFilter === 'ALL' ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500'
+              currentSubFilter === 'ALL'
+                ? 'bg-pink-500 text-white shadow-sm shadow-pink-400/40'
+                : 'border border-gray-300 bg-gray-200 text-gray-700'
             }`}
           >
             全部
@@ -628,7 +625,9 @@ export default function Dashboard() {
               type="button"
               onClick={() => setCurrentSubFilter(filterItem.key)}
               className={`rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
-                currentSubFilter === filterItem.key ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-500'
+                currentSubFilter === filterItem.key
+                  ? 'bg-pink-500 text-white shadow-sm shadow-pink-400/40'
+                  : 'border border-gray-300 bg-gray-200 text-gray-700'
               }`}
             >
               {filterItem.label}
