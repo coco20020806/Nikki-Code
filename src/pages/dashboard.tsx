@@ -1077,9 +1077,9 @@ export default function Dashboard() {
               e.stopPropagation()
               setPostcardLightbox(null)
             }}
-            className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/22"
+            className="absolute top-4 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-black/40 text-white shadow-lg drop-shadow-lg backdrop-blur-md transition-all hover:scale-110 hover:bg-black/55 active:scale-95"
           >
-            <X className="h-5 w-5" strokeWidth={2.2} />
+            <X className="h-6 w-6" strokeWidth={2.2} />
           </button>
           <div className="relative flex max-h-[min(88dvh,900px)] max-w-full flex-col items-center" onClick={(e) => e.stopPropagation()}>
             <div className="relative flex min-h-[min(40dvh,240px)] min-w-[min(72vw,200px)] max-w-full items-center justify-center sm:min-h-[280px]">
