@@ -20,8 +20,6 @@ function serverLabel(server: string): string {
   const map: Record<string, string> = {
     SN_CN: '闪耀暖暖国服',
     SN_TW: '闪耀暖暖台服',
-    SN_JP: '闪耀暖暖日服',
-    SN_GL: '闪耀暖暖国际服',
     IN_CN: '无限暖暖国服',
     IN_GL: '无限暖暖国际服',
   }

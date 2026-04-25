@@ -46,25 +46,24 @@ const DEFAULT_SERVER_SETTINGS: ServerSettings = {
   infinity: ['IN_CN'],
 }
 
+const VALID_SHINING_SERVERS = ['SN_CN', 'SN_TW'] as const
+const VALID_INFINITY_SERVERS = ['IN_CN', 'IN_GL'] as const
+
 const SHINING_SERVER_OPTIONS = [
   { code: 'SN_CN', label: '国服' },
   { code: 'SN_TW', label: '台服' },
-  { code: 'SN_JP', label: '日服' },
-  { code: 'SN_GL', label: 'Global' },
 ] as const
 
 const INFINITY_SERVER_OPTIONS = [
   { code: 'IN_CN', label: '国服' },
-  { code: 'IN_GL', label: 'Global' },
+  { code: 'IN_GL', label: '国际服' },
 ] as const
 
 const SERVER_LABEL_MAP: Record<string, string> = {
   SN_CN: '国服',
   SN_TW: '台服',
-  SN_JP: '日服',
-  SN_GL: 'Global',
   IN_CN: '国服',
-  IN_GL: 'Global',
+  IN_GL: '国际服',
 }
 const XHS_GROUP_URL = 'https://xhslink.com/m/4CZ4iefddWD'
 const XHS_DEV_URL = 'https://xhslink.com/m/1F4K5OqbaLQ'
@@ -99,8 +98,12 @@ function parseExpiryMs(expiryAt?: string): number | null {
 }
 
 function normalizeServerSettings(raw?: Partial<ServerSettings> | null): ServerSettings {
-  const shining = Array.isArray(raw?.shining) ? raw.shining.filter(Boolean) : []
-  const infinity = Array.isArray(raw?.infinity) ? raw.infinity.filter(Boolean) : []
+  const shining = Array.isArray(raw?.shining)
+    ? raw.shining.filter((code): code is string => VALID_SHINING_SERVERS.includes(code as (typeof VALID_SHINING_SERVERS)[number]))
+    : []
+  const infinity = Array.isArray(raw?.infinity)
+    ? raw.infinity.filter((code): code is string => VALID_INFINITY_SERVERS.includes(code as (typeof VALID_INFINITY_SERVERS)[number]))
+    : []
   return {
     shining: shining.length ? [...new Set(shining)] : [...DEFAULT_SERVER_SETTINGS.shining],
     infinity: infinity.length ? [...new Set(infinity)] : [...DEFAULT_SERVER_SETTINGS.infinity],
@@ -112,7 +115,6 @@ function getDefaultServerByGame(gameName: string): string {
 }
 
 function getServerFilterLabel(serverCode: string): string {
-  if (serverCode === 'SN_GL' || serverCode === 'IN_GL') return '国际服'
   return SERVER_LABEL_MAP[serverCode] || serverCode
 }
 

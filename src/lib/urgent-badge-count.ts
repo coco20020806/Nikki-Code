@@ -15,9 +15,16 @@ const DEFAULT_SERVER_SETTINGS: ServerSettings = {
   infinity: ['IN_CN'],
 }
 
+const VALID_SHINING_SERVERS = ['SN_CN', 'SN_TW'] as const
+const VALID_INFINITY_SERVERS = ['IN_CN', 'IN_GL'] as const
+
 function normalizeServerSettings(raw?: Partial<ServerSettings> | null): ServerSettings {
-  const shining = Array.isArray(raw?.shining) ? raw.shining.filter(Boolean) : []
-  const infinity = Array.isArray(raw?.infinity) ? raw.infinity.filter(Boolean) : []
+  const shining = Array.isArray(raw?.shining)
+    ? raw.shining.filter((code): code is string => VALID_SHINING_SERVERS.includes(code as (typeof VALID_SHINING_SERVERS)[number]))
+    : []
+  const infinity = Array.isArray(raw?.infinity)
+    ? raw.infinity.filter((code): code is string => VALID_INFINITY_SERVERS.includes(code as (typeof VALID_INFINITY_SERVERS)[number]))
+    : []
   return {
     shining: shining.length ? [...new Set(shining)] : [...DEFAULT_SERVER_SETTINGS.shining],
     infinity: infinity.length ? [...new Set(infinity)] : [...DEFAULT_SERVER_SETTINGS.infinity],

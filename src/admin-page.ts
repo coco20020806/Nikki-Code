@@ -23,8 +23,6 @@ const SERVER_OPTIONS = {
   '闪耀暖暖': [
     { value: 'SN_CN', label: '国服 (SN_CN)' },
     { value: 'SN_TW', label: '台服 (SN_TW)' },
-    { value: 'SN_JP', label: '日服 (SN_JP)' },
-    { value: 'SN_GL', label: '国际服 (SN_GL)' },
   ],
   '无限暖暖': [
     { value: 'IN_CN', label: '国服 (IN_CN)' },
@@ -139,8 +137,6 @@ root.innerHTML = `
             <option value="IN_GL">无限暖暖 - 国际服</option>
             <option value="SN_CN">闪耀暖暖 - 国服</option>
             <option value="SN_TW">闪耀暖暖 - 台服</option>
-            <option value="SN_JP">闪耀暖暖 - 日服</option>
-            <option value="SN_GL">闪耀暖暖 - Global</option>
           </select>
         </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">钻石奖励（留空则低价值）
