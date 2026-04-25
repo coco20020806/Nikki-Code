@@ -833,16 +833,25 @@ export default function Dashboard() {
       ) : null}
 
       {settingsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div className="glass-card w-full max-w-md rounded-3xl p-6">
-            <div className="mb-4 flex items-center justify-between">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSettingsOpen(false)
+          }}
+        >
+          <div className="glass-card mx-auto flex max-h-[85vh] w-full max-w-md animate-in fade-in zoom-in-95 flex-col overflow-hidden rounded-3xl md:max-w-lg">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/60 bg-white/85 px-5 py-4 backdrop-blur-md">
               <h3 className="text-xl font-bold">设置</h3>
-              <button type="button" onClick={() => setSettingsOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground active:scale-95"
+              >
                 关闭
               </button>
             </div>
 
-            <div className="space-y-4 text-sm">
+            <div className="space-y-4 overflow-y-auto p-5 text-sm">
               <div>
                 <p className="mb-2 font-bold">关注的游戏</p>
                 <label className="mb-2 flex items-center gap-2">
