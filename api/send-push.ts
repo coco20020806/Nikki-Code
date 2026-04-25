@@ -36,10 +36,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       password?: string
       gameName?: string
       server?: string
+      onlyTest?: boolean
     }
     const password = String(body.password ?? '').trim()
     const gameName = String(body.gameName ?? '').trim()
     const server = String(body.server ?? '').trim()
+    const onlyTest = Boolean(body.onlyTest)
 
     if (!verifyAdminPassword(password)) {
       return res.status(401).json({ error: 'Unauthorized' })
@@ -64,9 +66,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
-    const { data: rows, error: dbError } = await supabase
-      .from('push_subscriptions')
-      .select('endpoint, p256dh, auth_key')
+    let query = supabase.from('push_subscriptions').select('endpoint, p256dh, auth_key')
+    if (onlyTest) {
+      query = query.eq('is_test_device', true)
+    }
+    const { data: rows, error: dbError } = await query
 
     if (dbError) return res.status(500).json({ error: dbError.message })
 

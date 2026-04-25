@@ -102,6 +102,10 @@ root.innerHTML = `
         </select>
         <select id="filter-server" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;"></select>
       </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:hsl(var(--muted-foreground));cursor:pointer;">
+        <input id="push-only-test" type="checkbox" />
+        仅发送给测试设备
+      </label>
       <div id="list-active"></div>
       <div style="margin-top:14px;border-top:1px solid hsl(var(--border));padding-top:12px;">
         <button id="toggle-expired-btn" type="button" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid hsl(var(--border));background:#fff;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;">
@@ -170,6 +174,7 @@ const status = document.getElementById('status') as HTMLParagraphElement
 const listActiveWrap = document.getElementById('list-active') as HTMLDivElement
 const filterGameInput = document.getElementById('filter-game') as HTMLSelectElement
 const filterServerInput = document.getElementById('filter-server') as HTMLSelectElement
+const pushOnlyTestInput = document.getElementById('push-only-test') as HTMLInputElement
 const listExpiredWrap = document.getElementById('list-expired') as HTMLDivElement
 const toggleExpiredBtn = document.getElementById('toggle-expired-btn') as HTMLButtonElement
 const expiredTitle = document.getElementById('expired-title') as HTMLSpanElement
@@ -773,6 +778,7 @@ const handlePushCodeClick = async (btn: HTMLButtonElement) => {
         gameName: code.gameName,
         server: code.server || defaultServerByGame(code.gameName),
         codeText: code.codeText,
+        onlyTest: pushOnlyTestInput.checked,
       }),
     })
     const data = (await res.json().catch(() => ({}))) as { error?: string; sent?: number; failed?: number; total?: number }
