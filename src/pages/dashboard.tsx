@@ -153,6 +153,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [pwaBannerPad, setPwaBannerPad] = useState(false)
+  const [deviceEndpoint, setDeviceEndpoint] = useState<string>('')
   const { claimedIds, claimCode, unclaimCode } = useClaimedCodes()
   const { toast } = useToast()
 
@@ -275,6 +276,23 @@ export default function Dashboard() {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setDeviceEndpoint('')
+      return
+    }
+    void (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        setDeviceEndpoint(sub?.endpoint ?? '')
+      } catch {
+        setDeviceEndpoint('')
+      }
+    })()
+  }, [settingsOpen])
 
   const baseFilteredCodes = useMemo(() => {
     const nowMs = Date.now()
@@ -491,6 +509,16 @@ export default function Dashboard() {
       toast({ title: message, variant: 'destructive' })
     } finally {
       setUploadingPostcard(false)
+    }
+  }
+
+  const handleCopyDeviceEndpoint = async () => {
+    if (!deviceEndpoint) return
+    try {
+      await navigator.clipboard.writeText(deviceEndpoint)
+      toast({ title: '标识已复制，请去数据库标记' })
+    } catch {
+      toast({ title: '复制失败，请稍后重试', variant: 'destructive' })
     }
   }
 
@@ -938,6 +966,14 @@ export default function Dashboard() {
               <p className="border-t border-border/60 pt-4 text-center text-xs tabular-nums text-muted-foreground">
                 v{APP_VERSION} (Stable)
               </p>
+              <button
+                type="button"
+                onClick={handleCopyDeviceEndpoint}
+                disabled={!deviceEndpoint}
+                className="w-full rounded-xl border border-border bg-white p-3 text-left text-xs text-muted-foreground transition-colors hover:border-zinc-300 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                当前设备标识 (用于测试推送)：{deviceEndpoint ? `${deviceEndpoint.slice(-10)}（点击复制）` : '未检测到订阅'}
+              </button>
             </div>
           </div>
         </div>
