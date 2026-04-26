@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
@@ -67,10 +67,33 @@ const SERVER_LABEL_MAP: Record<string, string> = {
 }
 const XHS_GROUP_URL = 'https://xhslink.com/m/4CZ4iefddWD'
 const XHS_DEV_URL = 'https://xhslink.com/m/1F4K5OqbaLQ'
+const IMAGEKIT_URL_ENDPOINT = (import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT || '').trim().replace(/\/$/, '')
 
 function postcardDisplayName(nickname: string | null | undefined): string {
   const t = (nickname ?? '').trim()
   return t.length > 0 ? t : '热心玩家'
+}
+
+function optimizeWallImageUrl(url: string, kind: 'thumb' | 'lightbox'): string {
+  const trimmed = (url || '').trim()
+  if (!trimmed) return ''
+
+  const width = kind === 'thumb' ? 300 : 1200
+  const quality = kind === 'thumb' ? 70 : 85
+
+  if (IMAGEKIT_URL_ENDPOINT) {
+    const encoded = encodeURIComponent(trimmed)
+    return `${IMAGEKIT_URL_ENDPOINT}/${encoded}?tr=w-${width},q-${quality}`
+  }
+
+  try {
+    const u = new URL(trimmed)
+    u.searchParams.set('width', String(width))
+    u.searchParams.set('quality', String(quality))
+    return u.toString()
+  } catch {
+    return trimmed
+  }
 }
 
 /** 与每日巡逻 Cron 一致：168=7天档起，72=3天档起，24=1天档起 */
@@ -146,6 +169,7 @@ export default function Dashboard() {
   const [featuredImages, setFeaturedImages] = useState<FeaturedImage[]>([])
   const [postcardLightbox, setPostcardLightbox] = useState<FeaturedImage | null>(null)
   const [postcardLightboxLoaded, setPostcardLightboxLoaded] = useState(false)
+  const [loadedWallImageIds, setLoadedWallImageIds] = useState<Set<number>>(new Set())
   const [preferredGames, setPreferredGames] = useState<string[]>(['无限暖暖', '闪耀暖暖'])
   const [serverSettings, setServerSettings] = useState<ServerSettings>(DEFAULT_SERVER_SETTINGS)
   const [warningThresholdHours, setWarningThresholdHours] = useState(24)
@@ -158,6 +182,7 @@ export default function Dashboard() {
   const [deviceEndpoint, setDeviceEndpoint] = useState<string>('')
   const { claimedIds, claimCode, unclaimCode } = useClaimedCodes()
   const { toast } = useToast()
+  const wallTransferBytesRef = useRef(0)
 
   useEffect(() => {
     try {
@@ -250,6 +275,10 @@ export default function Dashboard() {
   useEffect(() => {
     setPostcardLightboxLoaded(false)
   }, [postcardLightbox?.id, postcardLightbox?.imageUrl])
+
+  useEffect(() => {
+    setLoadedWallImageIds(new Set())
+  }, [featuredImages])
 
   useEffect(() => {
     if (!postcardLightbox) return
@@ -523,6 +552,25 @@ export default function Dashboard() {
       toast({ title: '复制失败，请稍后重试', variant: 'destructive' })
     }
   }
+
+  const handleWallImageLoaded = useCallback((id: number, src: string) => {
+    setLoadedWallImageIds((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+
+    if (!import.meta.env.DEV || typeof performance === 'undefined') return
+    const entries = performance.getEntriesByName(src) as PerformanceResourceTiming[]
+    const entry = entries[entries.length - 1]
+    const size = entry?.transferSize || entry?.encodedBodySize || entry?.decodedBodySize || 0
+    if (size <= 0) return
+    wallTransferBytesRef.current += size
+    const totalKb = (wallTransferBytesRef.current / 1024).toFixed(1)
+    const currentKb = (size / 1024).toFixed(1)
+    console.info(`[照片墙流量监控] 当前图 ${currentKb}KB，累计约 ${totalKb}KB`)
+  }, [])
 
   const handlePullRefresh = useCallback(async () => {
     try {
@@ -1059,12 +1107,21 @@ export default function Dashboard() {
                 onClick={() => setPostcardLightbox(item)}
                 className="group relative shrink-0 cursor-pointer rounded-xl border-0 bg-transparent p-0 text-left shadow-sm ring-2 ring-transparent transition-all hover:ring-primary/35 focus-visible:ring-primary/50 focus-visible:outline-none"
               >
+                <div className="relative h-40 w-28 overflow-hidden rounded-xl">
+                  {!loadedWallImageIds.has(item.id) ? (
+                    <div className="absolute inset-0 animate-pulse bg-pink-100/80" aria-hidden />
+                  ) : null}
                 <img
-                  src={item.imageUrl}
+                  src={optimizeWallImageUrl(item.imageUrl, 'thumb')}
                   alt={`${postcardDisplayName(item.nickname)} 的投喂`}
-                  className="h-40 w-28 rounded-xl object-cover transition-transform group-hover:scale-[1.02] group-active:scale-[0.98]"
+                  className={`h-40 w-28 rounded-xl object-cover transition-all group-hover:scale-[1.02] group-active:scale-[0.98] ${
+                    loadedWallImageIds.has(item.id) ? 'opacity-100' : 'opacity-0'
+                  }`}
                   loading="lazy"
+                  decoding="async"
+                  onLoad={(e) => handleWallImageLoaded(item.id, (e.currentTarget as HTMLImageElement).currentSrc || e.currentTarget.src)}
                 />
+                </div>
                 <span className="mt-1 block max-w-[7rem] truncate px-0.5 text-center font-display text-[11px] italic tracking-wide text-primary/75">
                   {postcardDisplayName(item.nickname)}
                 </span>
@@ -1134,7 +1191,7 @@ export default function Dashboard() {
                 <Loader2 className="absolute h-10 w-10 animate-spin text-white/75" aria-hidden />
               ) : null}
               <img
-                src={postcardLightbox.imageUrl}
+                src={optimizeWallImageUrl(postcardLightbox.imageUrl, 'lightbox')}
                 alt="明信片大图"
                 className={`max-h-[min(78dvh,780px)] w-auto max-w-full rounded-2xl object-contain shadow-2xl ring-1 ring-white/15 transition-opacity duration-300 ${postcardLightboxLoaded ? 'opacity-100' : 'opacity-0'}`}
                 onLoad={() => setPostcardLightboxLoaded(true)}
