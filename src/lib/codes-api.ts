@@ -58,6 +58,8 @@ function mapRowToCode(row: CodeRow): Code {
 }
 
 const ADMIN_PASSWORD_FALLBACK = '123456'
+const EXCHANGE_CODE_REGEX = /^[a-zA-Z0-9\u4e00-\u9fa5]+$/
+const EXCHANGE_CODE_RULE_HINT = '兑换码仅支持字母、数字及中文'
 
 function requireAdminPassword(password: string) {
   const typed = password.trim()
@@ -105,6 +107,9 @@ export type AddCodeInput = {
 
 export async function addCode(input: AddCodeInput): Promise<void> {
   requireAdminPassword(input.password)
+  const codeText = input.codeText.trim()
+  if (!codeText) throw new Error('兑换码不能为空')
+  if (!EXCHANGE_CODE_REGEX.test(codeText)) throw new Error(EXCHANGE_CODE_RULE_HINT)
 
   const diamond = (input.diamondReward ?? '').trim()
   const other = (input.otherReward ?? '').trim()
@@ -113,7 +118,7 @@ export async function addCode(input: AddCodeInput): Promise<void> {
   const { error } = await supabase.from('codes').insert({
     game_name: input.gameName,
     server: input.server?.trim() || null,
-    code_text: input.codeText.toUpperCase(),
+    code_text: codeText,
     // 兼容旧列：如果表里只有 reward_desc，你也能看到“其他奖励”
     reward_desc: other || null,
     diamond_reward: diamond || null,
@@ -147,13 +152,14 @@ export async function updateCode(input: UpdateCodeInput): Promise<void> {
 
   const ct = input.codeText.trim()
   if (!ct) throw new Error('兑换码不能为空')
+  if (!EXCHANGE_CODE_REGEX.test(ct)) throw new Error(EXCHANGE_CODE_RULE_HINT)
 
   const diamond = (input.diamondReward ?? '').trim()
   const other = (input.otherReward ?? '').trim()
   const isHighValue = Boolean(diamond)
 
   const patch: Record<string, unknown> = {
-    code_text: ct.toUpperCase(),
+    code_text: ct,
     server: input.server?.trim() || null,
     diamond_reward: diamond || null,
     other_reward: other || null,

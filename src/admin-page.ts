@@ -19,6 +19,8 @@ warnIfVapidKeysMissingInClient()
 import { format } from 'date-fns'
 
 const ADMIN_PASSWORD_KEY = 'admin_password'
+const EXCHANGE_CODE_REGEX = /^[a-zA-Z0-9\u4e00-\u9fa5]+$/
+const EXCHANGE_CODE_RULE_HINT = '兑换码仅支持字母、数字及中文'
 const SERVER_OPTIONS = {
   '闪耀暖暖': [
     { value: 'SN_CN', label: '国服 (SN_CN)' },
@@ -75,6 +77,7 @@ root.innerHTML = `
         </select>
         <select name="server" class="h-11 w-full rounded-xl border border-input bg-white px-4"></select>
         <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4" required />
+        <p style="margin:-4px 0 0;font-size:12px;color:hsl(var(--muted-foreground));">${EXCHANGE_CODE_RULE_HINT}</p>
         <input name="diamondReward" placeholder="钻石奖励（可选；留空则低价值）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
         <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;">
@@ -130,6 +133,7 @@ root.innerHTML = `
         <input type="hidden" id="edit-code-id" value="" />
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">兑换码文字
           <input id="edit-code-text" type="text" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:15px;box-sizing:border-box;" />
+          <div style="margin-top:6px;font-size:11px;color:hsl(var(--muted-foreground));">${EXCHANGE_CODE_RULE_HINT}</div>
         </label>
         <label style="display:block;margin-bottom:14px;font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));">区服
           <select id="edit-server" style="margin-top:6px;display:block;width:100%;height:42px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 12px;background:#fff;font-size:14px;box-sizing:border-box;">
@@ -679,6 +683,9 @@ form.addEventListener('submit', async (event) => {
   status.style.color = 'hsl(var(--muted-foreground))'
 
   try {
+    const codeText = String(data.get('codeText') ?? '').trim()
+    if (!codeText) throw new Error('兑换码不能为空')
+    if (!EXCHANGE_CODE_REGEX.test(codeText)) throw new Error(EXCHANGE_CODE_RULE_HINT)
     const diamondReward = String(data.get('diamondReward') ?? '').trim()
     const otherReward = String(data.get('otherReward') ?? '').trim()
 
@@ -687,8 +694,7 @@ form.addEventListener('submit', async (event) => {
       gameName: String(data.get('gameName') ?? ''),
       server:
         String(data.get('server') ?? '').trim() || defaultServerByGame(String(data.get('gameName') ?? '无限暖暖')),
-      // 直接获取输入值，不再强制转换大小写
-      codeText: String(data.get('codeText') ?? '').trim(),
+      codeText,
       diamondReward: diamondReward || undefined,
       otherReward: otherReward || undefined,
       expiryAt: buildExpiryIso(String(data.get('expiryDate') ?? ''), String(data.get('expiryHour') ?? ''), String(data.get('expiryMinute') ?? '')),
@@ -1113,6 +1119,11 @@ editSaveBtn.addEventListener('click', async () => {
   const codeText = editCodeTextInput.value.trim()
   if (!codeText) {
     status.textContent = '兑换码不能为空'
+    status.style.color = '#e11d48'
+    return
+  }
+  if (!EXCHANGE_CODE_REGEX.test(codeText)) {
+    status.textContent = EXCHANGE_CODE_RULE_HINT
     status.style.color = '#e11d48'
     return
   }
