@@ -6,6 +6,7 @@ import NotFound from '@/pages/not-found'
 import { ToastProvider } from '@/hooks/use-toast'
 import { Toaster } from '@/components/ui/toaster'
 import { fetchUrgentUnclaimedBadgeCount } from '@/lib/urgent-badge-count'
+import { Analytics } from '@vercel/analytics/react'
 
 /**
  * 根据 Supabase 兑换码 + 本地已领取状态同步角标；不因「打开 App」无故清除。
@@ -68,6 +69,7 @@ export default function App() {
         <AppRouter />
       </WouterRouter>
       <Toaster />
+      <Analytics />
     </ToastProvider>
   )
 }
