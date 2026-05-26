@@ -3,6 +3,7 @@ import { registerNikkiServiceWorker } from '@/lib/register-sw'
 import { getCodePushApiUrl, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import {
   type AdminCodeWithReports,
+  type Submission,
   addCode,
   deleteCode,
   fetchAdminCodesWithReports,
@@ -13,6 +14,7 @@ import {
   updateCode,
   verifyAdminPassword,
 } from '@/lib/codes-api'
+import { APP_VERSION } from '@/constants/version'
 
 registerNikkiServiceWorker()
 warnIfVapidKeysMissingInClient()
@@ -52,7 +54,7 @@ root.innerHTML = `
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;">
       <h1 style="margin:0 0 8px;font-size:32px;">管理员录入</h1>
-      <p style="margin:0 0 20px;color:hsl(var(--muted-foreground));">输入密码后可新增兑换码</p>
+      <p style="margin:0 0 20px;color:hsl(var(--muted-foreground));">输入密码后可新增兑换码 · v${APP_VERSION}</p>
       <div style="margin-bottom:14px;padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
         <h2 style="margin:0 0 8px;font-size:18px;">AI 助手</h2>
         <p style="margin:0 0 8px;font-size:12px;color:hsl(var(--muted-foreground));">粘贴文本或拖入截图，自动提取兑换码信息。</p>
@@ -118,13 +120,17 @@ root.innerHTML = `
     </section>
     <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <h2 style="margin:0;font-size:24px;">玩家投稿</h2>
+        <h2 style="margin:0;font-size:24px;">玩家反馈</h2>
         <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:hsl(var(--muted-foreground));">
           <input id="show-history" type="checkbox" />
           查看历史/已阅投稿
         </label>
       </div>
-      <div id="submissions" style="margin-top:12px;"></div>
+      <div id="feedback-submissions" style="margin-top:12px;"></div>
+    </section>
+    <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
+      <h2 style="margin:0;font-size:24px;">玩家投稿</h2>
+      <div id="image-submissions" style="margin-top:12px;"></div>
     </section>
     <div id="admin-toast" role="status" aria-live="polite" style="display:none;position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;z-index:320;max-width:min(92vw,400px);padding:14px 20px;border-radius:16px;background:rgba(24,24,32,0.92);color:#fafafa;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 14px 44px rgba(0,0,0,0.28);backdrop-filter:blur(10px);text-align:center;transform:translateX(-50%);"></div>
     <div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:20px;background:rgba(15,15,20,0.38);backdrop-filter:blur(6px);">
@@ -179,7 +185,8 @@ const listExpiredWrap = document.getElementById('list-expired') as HTMLDivElemen
 const toggleExpiredBtn = document.getElementById('toggle-expired-btn') as HTMLButtonElement
 const expiredTitle = document.getElementById('expired-title') as HTMLSpanElement
 const expiredChevron = document.getElementById('expired-chevron') as HTMLSpanElement
-const submissionsWrap = document.getElementById('submissions') as HTMLDivElement
+const feedbackSubmissionsWrap = document.getElementById('feedback-submissions') as HTMLDivElement
+const imageSubmissionsWrap = document.getElementById('image-submissions') as HTMLDivElement
 const showHistoryInput = document.getElementById('show-history') as HTMLInputElement
 const authStatus = document.getElementById('auth-status') as HTMLParagraphElement
 const headerPasswordInput = document.getElementById('header-password') as HTMLInputElement
@@ -609,31 +616,21 @@ function renderExpiredList() {
     .join('')
 }
 
-async function refreshSubmissions() {
-  const password = getAdminPassword()
-  if (!password.trim()) {
-    submissionsWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">输入管理员密码后可查看投稿。</p>`
-    return
-  }
-  try {
-    const rows = await listSubmissions(password, showHistoryInput.checked)
-    if (!rows.length) {
-      submissionsWrap.innerHTML = `<p style="color:hsl(var(--muted-foreground));font-size:12px;">暂无投稿。</p>`
-      return
-    }
-    submissionsWrap.innerHTML = rows
-      .map(
-        (item) => `
+function isImageSubmission(item: Submission): boolean {
+  return Boolean(item.imageUrl?.trim())
+}
+
+function submissionEmptyHtml(message: string): string {
+  return `<p style="color:hsl(var(--muted-foreground));font-size:12px;">${message}</p>`
+}
+
+function renderTextSubmissionRow(item: Submission): string {
+  return `
         <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid hsl(var(--border));opacity:${item.isRead ? '0.55' : '1'};">
           <div style="min-width:0;flex:1;">
-            ${
-              item.type === 'image' && item.imageUrl
-                ? `<a href="${item.imageUrl}" target="_blank" rel="noreferrer"><img src="${item.imageUrl}" alt="投稿图片" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid hsl(var(--border));" /></a>
-                  <div style="margin-top:6px;font-size:12px;font-style:italic;color:hsl(var(--muted-foreground));">昵称：${escapeHtml(String(item.nickname ?? '').trim() || '热心玩家')}</div>`
-                : `<div style="font-size:13px;line-height:1.6;text-decoration:${item.isRead ? 'line-through' : 'none'};">${item.content}</div>`
-            }
+            <div style="font-size:13px;line-height:1.6;text-decoration:${item.isRead ? 'line-through' : 'none'};">${escapeHtml(item.content)}</div>
             <div style="margin-top:6px;font-size:11px;color:hsl(var(--muted-foreground));">
-              ${format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm')} / ${item.type === 'image' ? '图片投稿' : '文字投稿'}
+              ${format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm')} / 文字反馈
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
@@ -646,33 +643,83 @@ async function refreshSubmissions() {
             >
               ${item.isRead ? '取消已阅' : '已阅'}
             </button>
-            ${
-              item.type === 'image'
-                ? `<button
-                    type="button"
-                    data-action="toggle-featured"
-                    data-id="${item.id}"
-                    data-is-featured="${item.isFeatured ? '1' : '0'}"
-                    style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--accent)/0.45);background:${item.isFeatured ? 'hsl(var(--accent)/0.2)' : 'white'};color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
-                  >
-                    ${item.isFeatured ? '取消精选' : '精选展示'}
-                  </button>`
-                : ''
-            }
           </div>
         </div>
-      `,
-      )
-      .join('')
+      `
+}
+
+function renderImageSubmissionRow(item: Submission): string {
+  return `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid hsl(var(--border));opacity:${item.isRead ? '0.55' : '1'};">
+          <div style="min-width:0;flex:1;">
+            <a href="${item.imageUrl}" target="_blank" rel="noreferrer"><img src="${item.imageUrl}" alt="投稿图片" style="width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid hsl(var(--border));" /></a>
+            <div style="margin-top:6px;font-size:12px;font-style:italic;color:hsl(var(--muted-foreground));">昵称：${escapeHtml(String(item.nickname ?? '').trim() || '热心玩家')}</div>
+            <div style="margin-top:6px;font-size:11px;color:hsl(var(--muted-foreground));">
+              ${format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm')} / 图片投稿
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+            <button
+              type="button"
+              data-action="toggle-read"
+              data-id="${item.id}"
+              data-is-read="${item.isRead ? '1' : '0'}"
+              style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--border));background:white;color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
+            >
+              ${item.isRead ? '取消已阅' : '已阅'}
+            </button>
+            <button
+              type="button"
+              data-action="toggle-featured"
+              data-id="${item.id}"
+              data-is-featured="${item.isFeatured ? '1' : '0'}"
+              style="flex:0 0 auto;align-self:flex-start;border:1px solid hsl(var(--accent)/0.45);background:${item.isFeatured ? 'hsl(var(--accent)/0.2)' : 'white'};color:hsl(var(--foreground));border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:13px;"
+            >
+              ${item.isFeatured ? '取消精选' : '精选展示'}
+            </button>
+          </div>
+        </div>
+      `
+}
+
+function setSubmissionsAuthPrompt(message: string) {
+  feedbackSubmissionsWrap.innerHTML = submissionEmptyHtml(message)
+  imageSubmissionsWrap.innerHTML = submissionEmptyHtml(message)
+}
+
+function setSubmissionsError(message: string) {
+  feedbackSubmissionsWrap.innerHTML = `<p style="color:#e11d48;">${message}</p>`
+  imageSubmissionsWrap.innerHTML = ''
+}
+
+async function refreshSubmissions() {
+  const password = getAdminPassword()
+  if (!password.trim()) {
+    setSubmissionsAuthPrompt('输入管理员密码后可查看投稿。')
+    return
+  }
+  try {
+    const rows = await listSubmissions(password, showHistoryInput.checked)
+    const textRows = rows.filter((item) => !isImageSubmission(item))
+    const imageRows = rows.filter((item) => isImageSubmission(item))
+
+    feedbackSubmissionsWrap.innerHTML = textRows.length
+      ? textRows.map((item) => renderTextSubmissionRow(item)).join('')
+      : submissionEmptyHtml('暂无文字反馈。')
+
+    imageSubmissionsWrap.innerHTML = imageRows.length
+      ? imageRows.map((item) => renderImageSubmissionRow(item)).join('')
+      : submissionEmptyHtml('暂无图片投稿。')
+
     persistPassword(password)
   } catch (err) {
     if (isAuthError(err)) {
       clearPasswordAndRequireInput('密码失效，请重新输入管理员密码')
-      submissionsWrap.innerHTML = `<p style="color:#e11d48;">密码失效，请重新输入。</p>`
+      setSubmissionsError('密码失效，请重新输入。')
       return
     }
     const msg = err instanceof Error ? err.message : '读取失败'
-    submissionsWrap.innerHTML = `<p style="color:#e11d48;">读取失败：${msg}</p>`
+    setSubmissionsError(`读取失败：${msg}`)
   }
 }
 
@@ -822,7 +869,7 @@ listExpiredWrap.addEventListener('click', async (e) => {
   await handleDeleteClick(btn)
 })
 
-submissionsWrap.addEventListener('click', async (e) => {
+async function handleSubmissionActionClick(e: Event) {
   const target = e.target as HTMLElement | null
   const btn = target?.closest('button[data-action]') as HTMLButtonElement | null
   if (!btn) return
@@ -879,6 +926,14 @@ submissionsWrap.addEventListener('click', async (e) => {
       status.style.color = '#e11d48'
     }
   }
+}
+
+feedbackSubmissionsWrap.addEventListener('click', (e) => {
+  void handleSubmissionActionClick(e)
+})
+
+imageSubmissionsWrap.addEventListener('click', (e) => {
+  void handleSubmissionActionClick(e)
 })
 
 showHistoryInput.addEventListener('change', () => {
