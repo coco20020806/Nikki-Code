@@ -1,73 +1,31 @@
-# React + TypeScript + Vite
+# 🎮 NikkiCode
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**一句话描述：** 面向《闪耀暖暖》与《无限暖暖》核心玩家的 PWA 兑换码管理与视觉资产聚合工具。
 
-Currently, two official plugins are available:
+## 🌐 在线体验
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+[点击访问](https://nikki-code.vercel.app)
 
-## React Compiler
+## 这是什么
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+专为《闪耀暖暖》与《无限暖暖》玩家设计。不仅能自动聚合官方渠道发布的兑换码，告别信息碎片化与过期烦恼；还提供了一个高性能的玩家明信片 / 穿搭展示墙，沉淀玩家社群视觉资产。
 
-## Expanding the ESLint configuration
+## 功能
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- ✅ **兑换码 Hub**：精准管理双端兑换码，支持大小写与中文口令，一键复制并本地记录已领状态。
+- ✅ **极速照片墙**：玩家投稿展示搭配，接入国内云端实时边缘压缩，弱网环境也能「秒开」。
+- ✅ **AI 智能提取**：管理端集成大模型，一键从杂乱文本或截图中提取有效兑换码。
+- ✅ **PWA 体验**：支持安装到手机桌面，配合 Web Push 到期提醒，体验媲美原生 App。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 技术栈
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+| 层级 | 技术 |
+|------|------|
+| **前端** | Vite / React / TailwindCSS（SPA，路由：wouter） |
+| **后端与数据库** | Vercel Serverless Functions（`/api`）/ Supabase |
+| **存储与 CDN** | 腾讯云 COS（对象存储，预签名直传）+ 数据万象 / ImageKit 图片动态压缩 |
+| **AI 协助** | Cursor / Gemini API |
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 作者
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Vibe coded by **KFC** with AI
