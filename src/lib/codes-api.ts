@@ -247,37 +247,49 @@ export async function submitFeedback(content: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-/** 去掉路径，仅保留一段文件名；替换路径/URL 非法与控制字符，避免重名用外层 Date.now() 前缀 */
-function safeStorageFileName(originalName: string): string {
+function fileExtensionFromName(originalName: string): string {
   const base = originalName.replace(/^.*[/\\]/, '').trim() || 'image'
-  const cleaned = base.replace(/[\x00-\x1f"#*:<>?|]/g, '_').replace(/^\.+/, '')
-  return cleaned || 'image.jpg'
+  const dot = base.lastIndexOf('.')
+  const ext = dot > 0 ? base.slice(dot).toLowerCase() : '.jpg'
+  return /^\.[a-z0-9]{1,8}$/i.test(ext) ? ext : '.jpg'
 }
 
 const MAX_POSTCARD_NICKNAME_LEN = 48
 
 export async function submitImageFeeding(file: File, options?: { nickname?: string }): Promise<void> {
-  const safeName = safeStorageFileName(file.name)
-  const filePath = `feedings/${Date.now()}-${safeName}`
+  const ext = fileExtensionFromName(file.name)
 
-  const { error: uploadError } = await supabase.storage.from('submissions').upload(filePath, file, {
-    upsert: false,
-    contentType: file.type || 'image/jpeg',
+  const signRes = await fetch(pushApiUrl('api/get-cos-sign'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ext }),
   })
-  if (uploadError) {
-    console.error('[submitImageFeeding] Storage 上传失败，完整 error:', uploadError)
-    console.error('[submitImageFeeding] error 序列化:', JSON.stringify(uploadError, null, 2))
-    throw new Error(uploadError.message)
+  const signPayload = (await signRes.json().catch(() => ({}))) as {
+    uploadUrl?: string
+    publicUrl?: string
+    error?: string
+  }
+  if (!signRes.ok || !signPayload.uploadUrl || !signPayload.publicUrl) {
+    throw new Error(signPayload.error || '获取上传凭证失败')
+  }
+
+  const putRes = await fetch(signPayload.uploadUrl, {
+    method: 'PUT',
+    body: file,
+  })
+  if (!putRes.ok) {
+    const detail = await putRes.text().catch(() => '')
+    console.error('[submitImageFeeding] COS PUT 失败', putRes.status, detail)
+    throw new Error('图片上传失败')
   }
 
   const rawNick = (options?.nickname ?? '').trim().slice(0, MAX_POSTCARD_NICKNAME_LEN)
   const nickname = rawNick.length > 0 ? rawNick : null
 
-  const { data } = supabase.storage.from('submissions').getPublicUrl(filePath)
   const { error } = await supabase.from('submissions').insert({
     content: '',
     type: 'image',
-    image_url: data.publicUrl,
+    image_url: signPayload.publicUrl,
     nickname,
     is_read: false,
     is_featured: false,
