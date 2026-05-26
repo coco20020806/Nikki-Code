@@ -35,8 +35,9 @@ const SERVER_OPTIONS = {
   ],
 } as const
 
-const root = document.getElementById('admin-root')
-if (!root) throw new Error('admin root not found')
+const adminRoot = document.getElementById('admin-root')
+if (!adminRoot) throw new Error('admin root not found')
+const root: HTMLElement = adminRoot
 
 root.innerHTML = `
   <main style="max-width:840px;margin:40px auto;padding:0 16px;">
