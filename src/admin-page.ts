@@ -15,6 +15,7 @@ import {
   verifyAdminPassword,
 } from '@/lib/codes-api'
 import { APP_VERSION } from '@/constants/version'
+import { initCollapsibleSections } from '@/lib/init-collapsible-sections'
 
 registerNikkiServiceWorker()
 warnIfVapidKeysMissingInClient()
@@ -52,85 +53,135 @@ root.innerHTML = `
         </div>
       </div>
     </section>
-    <section class="glass-card" style="padding:24px;border-radius:24px;">
+    <div style="margin:0 0 16px;padding:0 4px;">
       <h1 style="margin:0 0 8px;font-size:32px;">管理员录入</h1>
-      <p style="margin:0 0 20px;color:hsl(var(--muted-foreground));">输入密码后可新增兑换码 · v${APP_VERSION}</p>
-      <div style="margin-bottom:14px;padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
-        <h2 style="margin:0 0 8px;font-size:18px;">AI 助手</h2>
-        <p style="margin:0 0 8px;font-size:12px;color:hsl(var(--muted-foreground));">粘贴文本或拖入截图，自动提取兑换码信息。</p>
-        <textarea id="ai-text" placeholder="把公告文本粘贴到这里..." style="width:100%;min-height:90px;border:1px solid hsl(var(--input));border-radius:12px;padding:10px;background:#fff;resize:vertical;"></textarea>
-        <div id="ai-dropzone" style="margin-top:8px;padding:12px;border:1px dashed hsl(var(--border));border-radius:12px;background:rgba(255,255,255,0.8);font-size:12px;color:hsl(var(--muted-foreground));">
-          拖入截图到这里，或选择图片
-          <input id="ai-image" type="file" accept="image/*" style="display:block;margin-top:8px;font-size:12px;" />
+      <p style="margin:0;color:hsl(var(--muted-foreground));">输入密码后可新增兑换码 · v${APP_VERSION}</p>
+    </div>
+    <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
+      <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
+        <h2 style="margin:0;font-size:20px;font-weight:700;">AI 兑换码提取</h2>
+        <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
+      </button>
+      <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
+        <div style="min-height:0;overflow:hidden;">
+          <div style="padding:0 24px 24px;">
+            <div style="margin-bottom:14px;padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
+              <p style="margin:0 0 8px;font-size:12px;color:hsl(var(--muted-foreground));">粘贴文本或拖入截图，自动提取兑换码信息。</p>
+              <textarea id="ai-text" placeholder="把公告文本粘贴到这里..." style="width:100%;min-height:90px;border:1px solid hsl(var(--input));border-radius:12px;padding:10px;background:#fff;resize:vertical;"></textarea>
+              <div id="ai-dropzone" style="margin-top:8px;padding:12px;border:1px dashed hsl(var(--border));border-radius:12px;background:rgba(255,255,255,0.8);font-size:12px;color:hsl(var(--muted-foreground));">
+                拖入截图到这里，或选择图片
+                <input id="ai-image" type="file" accept="image/*" style="display:block;margin-top:8px;font-size:12px;" />
+              </div>
+              <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <p id="ai-status" style="margin:0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
+                <button id="ai-extract-btn" type="button" style="height:38px;padding:0 18px;border:none;border-radius:999px;background:hsl(var(--primary));color:white;font-weight:500;cursor:pointer;font-size:14px;">识别</button>
+              </div>
+            </div>
+            <div style="padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
+              <h3 style="margin:0 0 8px;font-size:16px;font-weight:600;">AI 待验证列表 (Pending Verification)</h3>
+              <div id="pending-list"></div>
+            </div>
+          </div>
         </div>
-        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <p id="ai-status" style="margin:0;font-size:12px;color:hsl(var(--muted-foreground));"></p>
-          <button id="ai-extract-btn" type="button" style="height:38px;padding:0 18px;border:none;border-radius:999px;background:hsl(var(--primary));color:white;font-weight:500;cursor:pointer;font-size:14px;">识别</button>
-        </div>
-      </div>
-      <div style="margin-bottom:14px;padding:14px;border:1px solid hsl(var(--border));border-radius:16px;background:rgba(255,255,255,0.75);">
-        <h2 style="margin:0 0 8px;font-size:18px;">AI 待验证列表 (Pending Verification)</h2>
-        <div id="pending-list"></div>
-      </div>
-      <form id="code-form" style="display:grid;gap:12px;">
-        <select name="gameName" class="h-11 w-full rounded-xl border border-input bg-white px-4">
-          <option value="无限暖暖">无限暖暖</option>
-          <option value="闪耀暖暖">闪耀暖暖</option>
-        </select>
-        <select name="server" class="h-11 w-full rounded-xl border border-input bg-white px-4"></select>
-        <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4" required />
-        <p style="margin:-4px 0 0;font-size:12px;color:hsl(var(--muted-foreground));">${EXCHANGE_CODE_RULE_HINT}</p>
-        <input name="diamondReward" placeholder="钻石奖励（可选；留空则低价值）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;">
-          <input name="expiryDate" type="date" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-          <select name="expiryHour" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
-          <select name="expiryMinute" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
-          <button id="set-end-of-day-btn" type="button" style="height:44px;padding:0 12px;border:1px solid hsl(var(--border));border-radius:999px;background:#fff;color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">
-            23:59
-          </button>
-        </div>
-        <input name="source" placeholder="来源（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
-        <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">确认上线</button>
-      </form>
-      <p id="status" style="margin-top:10px;"></p>
-    </section>
-    <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
-      <h2 style="margin:0 0 12px;font-size:24px;">进行中兑换码</h2>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
-        <select id="filter-game" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;">
-          <option value="全部">全部</option>
-          <option value="闪耀暖暖">闪耀暖暖</option>
-          <option value="无限暖暖">无限暖暖</option>
-        </select>
-        <select id="filter-server" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;"></select>
-      </div>
-      <label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:hsl(var(--muted-foreground));cursor:pointer;">
-        <input id="push-only-test" type="checkbox" />
-        仅发送给测试设备
-      </label>
-      <div id="list-active"></div>
-      <div style="margin-top:14px;border-top:1px solid hsl(var(--border));padding-top:12px;">
-        <button id="toggle-expired-btn" type="button" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid hsl(var(--border));background:#fff;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;">
-          <span id="expired-title">查看已过期的兑换码 (0)</span>
-          <span id="expired-chevron">▾</span>
-        </button>
-        <div id="list-expired" style="display:none;margin-top:10px;"></div>
       </div>
     </section>
-    <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <h2 style="margin:0;font-size:24px;">玩家反馈</h2>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:hsl(var(--muted-foreground));">
-          <input id="show-history" type="checkbox" />
-          查看历史/已阅投稿
-        </label>
+    <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
+      <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
+        <h2 style="margin:0;font-size:20px;font-weight:700;">兑换码录入</h2>
+        <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
+      </button>
+      <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
+        <div style="min-height:0;overflow:hidden;">
+          <div style="padding:0 24px 24px;">
+            <form id="code-form" style="display:grid;gap:12px;">
+              <select name="gameName" class="h-11 w-full rounded-xl border border-input bg-white px-4">
+                <option value="无限暖暖">无限暖暖</option>
+                <option value="闪耀暖暖">闪耀暖暖</option>
+              </select>
+              <select name="server" class="h-11 w-full rounded-xl border border-input bg-white px-4"></select>
+              <input name="codeText" placeholder="兑换码" class="h-11 w-full rounded-xl border border-input bg-white px-4" required />
+              <p style="margin:-4px 0 0;font-size:12px;color:hsl(var(--muted-foreground));">${EXCHANGE_CODE_RULE_HINT}</p>
+              <input name="diamondReward" placeholder="钻石奖励（可选；留空则低价值）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+              <input name="otherReward" placeholder="其他奖励（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+              <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;">
+                <input name="expiryDate" type="date" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+                <select name="expiryHour" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
+                <select name="expiryMinute" class="h-11 rounded-xl border border-input bg-white px-2" style="min-width:76px;"></select>
+                <button id="set-end-of-day-btn" type="button" style="height:44px;padding:0 12px;border:1px solid hsl(var(--border));border-radius:999px;background:#fff;color:hsl(var(--foreground));font-size:12px;font-weight:600;cursor:pointer;">
+                  23:59
+                </button>
+              </div>
+              <input name="source" placeholder="来源（可选）" class="h-11 w-full rounded-xl border border-input bg-white px-4" />
+              <button class="rounded-xl bg-primary text-primary-foreground" type="submit" style="height:44px;border:none;font-weight:500;cursor:pointer;border-radius:999px;">确认上线</button>
+            </form>
+            <p id="status" style="margin-top:10px;"></p>
+          </div>
+        </div>
       </div>
-      <div id="feedback-submissions" style="margin-top:12px;"></div>
     </section>
-    <section class="glass-card" style="padding:24px;border-radius:24px;margin-top:20px;">
-      <h2 style="margin:0;font-size:24px;">玩家投稿</h2>
-      <div id="image-submissions" style="margin-top:12px;"></div>
+    <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
+      <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
+        <h2 style="margin:0;font-size:20px;font-weight:700;">进行中兑换码与推送</h2>
+        <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
+      </button>
+      <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
+        <div style="min-height:0;overflow:hidden;">
+          <div style="padding:0 24px 24px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+              <select id="filter-game" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;">
+                <option value="全部">全部</option>
+                <option value="闪耀暖暖">闪耀暖暖</option>
+                <option value="无限暖暖">无限暖暖</option>
+              </select>
+              <select id="filter-server" style="height:40px;border:1px solid hsl(var(--input));border-radius:12px;padding:0 10px;background:#fff;font-size:13px;"></select>
+            </div>
+            <label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:hsl(var(--muted-foreground));cursor:pointer;">
+              <input id="push-only-test" type="checkbox" />
+              仅发送给测试设备
+            </label>
+            <div id="list-active"></div>
+            <div style="margin-top:14px;border-top:1px solid hsl(var(--border));padding-top:12px;">
+              <button id="toggle-expired-btn" type="button" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:1px solid hsl(var(--border));background:#fff;border-radius:12px;padding:10px 12px;font-weight:700;cursor:pointer;">
+                <span id="expired-title">查看已过期的兑换码 (0)</span>
+                <span id="expired-chevron">▾</span>
+              </button>
+              <div id="list-expired" style="display:none;margin-top:10px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
+      <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
+        <h2 style="margin:0;font-size:20px;font-weight:700;">玩家反馈</h2>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label id="show-history-label" style="display:flex;align-items:center;gap:8px;font-size:12px;color:hsl(var(--muted-foreground));font-weight:400;">
+            <input id="show-history" type="checkbox" />
+            查看历史/已阅投稿
+          </label>
+          <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
+        </div>
+      </button>
+      <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
+        <div style="min-height:0;overflow:hidden;">
+          <div style="padding:0 24px 24px;">
+            <div id="feedback-submissions"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
+      <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
+        <h2 style="margin:0;font-size:20px;font-weight:700;">玩家投稿</h2>
+        <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
+      </button>
+      <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
+        <div style="min-height:0;overflow:hidden;">
+          <div style="padding:0 24px 24px;">
+            <div id="image-submissions"></div>
+          </div>
+        </div>
+      </div>
     </section>
     <div id="admin-toast" role="status" aria-live="polite" style="display:none;position:fixed;bottom:calc(22px + env(safe-area-inset-bottom,0px));left:50%;z-index:320;max-width:min(92vw,400px);padding:14px 20px;border-radius:16px;background:rgba(24,24,32,0.92);color:#fafafa;font-size:14px;font-weight:600;line-height:1.45;box-shadow:0 14px 44px rgba(0,0,0,0.28);backdrop-filter:blur(10px);text-align:center;transform:translateX(-50%);"></div>
     <div id="edit-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;padding:20px;background:rgba(15,15,20,0.38);backdrop-filter:blur(6px);">
@@ -188,6 +239,9 @@ const expiredChevron = document.getElementById('expired-chevron') as HTMLSpanEle
 const feedbackSubmissionsWrap = document.getElementById('feedback-submissions') as HTMLDivElement
 const imageSubmissionsWrap = document.getElementById('image-submissions') as HTMLDivElement
 const showHistoryInput = document.getElementById('show-history') as HTMLInputElement
+const showHistoryLabel = document.getElementById('show-history-label') as HTMLLabelElement | null
+showHistoryLabel?.addEventListener('click', (e) => e.stopPropagation())
+initCollapsibleSections(root)
 const authStatus = document.getElementById('auth-status') as HTMLParagraphElement
 const headerPasswordInput = document.getElementById('header-password') as HTMLInputElement
 const headerVerifyBtn = document.getElementById('header-verify-btn') as HTMLButtonElement
