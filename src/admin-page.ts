@@ -154,17 +154,15 @@ root.innerHTML = `
     <section class="glass-card" style="overflow:hidden;padding:0;border-radius:24px;margin-bottom:20px;" data-collapsible data-default-open="true">
       <button type="button" data-collapsible-trigger aria-expanded="true" style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 0.2s;" onmouseover="this.style.background='hsl(var(--muted) / 0.35)'" onmouseout="this.style.background='transparent'">
         <h2 style="margin:0;font-size:20px;font-weight:700;">玩家反馈</h2>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <label id="show-history-label" style="display:flex;align-items:center;gap:8px;font-size:12px;color:hsl(var(--muted-foreground));font-weight:400;">
-            <input id="show-history" type="checkbox" />
-            查看历史/已阅投稿
-          </label>
-          <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
-        </div>
+        <span data-collapsible-chevron style="display:inline-flex;color:hsl(var(--muted-foreground));transition:transform 0.3s ease;transform:rotate(180deg);font-size:18px;line-height:1;" aria-hidden="true">⌄</span>
       </button>
       <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
         <div style="min-height:0;overflow:hidden;">
           <div style="padding:0 24px 24px;">
+            <label class="show-read-submissions-label" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:hsl(var(--muted-foreground));cursor:pointer;width:fit-content;">
+              <input type="checkbox" class="show-read-submissions-cb" style="width:16px;height:16px;accent-color:hsl(var(--primary));" />
+              <span>显示已阅记录</span>
+            </label>
             <div id="feedback-submissions"></div>
           </div>
         </div>
@@ -178,6 +176,10 @@ root.innerHTML = `
       <div data-collapsible-panel style="display:grid;grid-template-rows:1fr;transition:grid-template-rows 0.3s ease;">
         <div style="min-height:0;overflow:hidden;">
           <div style="padding:0 24px 24px;">
+            <label class="show-read-submissions-label" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:hsl(var(--muted-foreground));cursor:pointer;width:fit-content;">
+              <input type="checkbox" class="show-read-submissions-cb" style="width:16px;height:16px;accent-color:hsl(var(--primary));" />
+              <span>显示已阅记录</span>
+            </label>
             <div id="image-submissions"></div>
           </div>
         </div>
@@ -238,10 +240,28 @@ const expiredTitle = document.getElementById('expired-title') as HTMLSpanElement
 const expiredChevron = document.getElementById('expired-chevron') as HTMLSpanElement
 const feedbackSubmissionsWrap = document.getElementById('feedback-submissions') as HTMLDivElement
 const imageSubmissionsWrap = document.getElementById('image-submissions') as HTMLDivElement
-const showHistoryInput = document.getElementById('show-history') as HTMLInputElement
-const showHistoryLabel = document.getElementById('show-history-label') as HTMLLabelElement | null
-showHistoryLabel?.addEventListener('click', (e) => e.stopPropagation())
+/** 默认隐藏已阅；文字反馈与图片投稿共用 */
+let showReadSubmissions = false
+
+function syncShowReadSubmissionsCheckboxes(checked: boolean) {
+  showReadSubmissions = checked
+  root.querySelectorAll<HTMLInputElement>('.show-read-submissions-cb').forEach((cb) => {
+    cb.checked = checked
+  })
+}
+
+function bindShowReadSubmissionsToggles() {
+  root.querySelectorAll<HTMLInputElement>('.show-read-submissions-cb').forEach((cb) => {
+    cb.checked = showReadSubmissions
+    cb.addEventListener('change', () => {
+      syncShowReadSubmissionsCheckboxes(cb.checked)
+      void refreshSubmissions()
+    })
+  })
+}
+
 initCollapsibleSections(root)
+bindShowReadSubmissionsToggles()
 const authStatus = document.getElementById('auth-status') as HTMLParagraphElement
 const headerPasswordInput = document.getElementById('header-password') as HTMLInputElement
 const headerVerifyBtn = document.getElementById('header-verify-btn') as HTMLButtonElement
@@ -753,17 +773,21 @@ async function refreshSubmissions() {
     return
   }
   try {
-    const rows = await listSubmissions(password, showHistoryInput.checked)
-    const textRows = rows.filter((item) => !isImageSubmission(item))
-    const imageRows = rows.filter((item) => isImageSubmission(item))
+    const rows = await listSubmissions(password, showReadSubmissions)
+    const visibleRows = showReadSubmissions ? rows : rows.filter((item) => !item.isRead)
+    const textRows = visibleRows.filter((item) => !isImageSubmission(item))
+    const imageRows = visibleRows.filter((item) => isImageSubmission(item))
+
+    const textEmpty = showReadSubmissions ? '暂无文字反馈。' : '暂无未阅的文字反馈。'
+    const imageEmpty = showReadSubmissions ? '暂无图片投稿。' : '暂无未阅的图片投稿。'
 
     feedbackSubmissionsWrap.innerHTML = textRows.length
       ? textRows.map((item) => renderTextSubmissionRow(item)).join('')
-      : submissionEmptyHtml('暂无文字反馈。')
+      : submissionEmptyHtml(textEmpty)
 
     imageSubmissionsWrap.innerHTML = imageRows.length
       ? imageRows.map((item) => renderImageSubmissionRow(item)).join('')
-      : submissionEmptyHtml('暂无图片投稿。')
+      : submissionEmptyHtml(imageEmpty)
 
     persistPassword(password)
   } catch (err) {
@@ -988,10 +1012,6 @@ feedbackSubmissionsWrap.addEventListener('click', (e) => {
 
 imageSubmissionsWrap.addEventListener('click', (e) => {
   void handleSubmissionActionClick(e)
-})
-
-showHistoryInput.addEventListener('change', () => {
-  void refreshSubmissions()
 })
 
 form.addEventListener('input', () => {
