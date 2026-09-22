@@ -1,7 +1,15 @@
 {
-    "rewrites": [{ "source": "/admin", "destination": "/admin.html" }],
-    "crons": [{
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin.html" },
+    {
+      "source": "/supabase-proxy/:path*",
+      "destination": "https://nobtvzhzjvvidkmukzsw.supabase.co/:path*"
+    }
+  ],
+  "crons": [
+    {
       "path": "/api/cron-push",
       "schedule": "0 0 * * *"
-    }]
-  }
+    }
+  ]
+}

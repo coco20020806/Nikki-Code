@@ -29,6 +29,7 @@ import {
   checkServiceWorkerUpdateAvailable,
 } from '@/lib/sw-update'
 import { APP_VERSION } from '@/lib/app-version'
+import { presentLoadError } from '@/lib/load-error'
 import { isVapidPublicKeyConfigured, subscribePushAndPersist, warnIfVapidKeysMissingInClient } from '@/lib/push-notifications'
 import type { Code } from '@/types/code'
 
@@ -178,6 +179,7 @@ export default function Dashboard() {
   const [codes, setCodes] = useState<Code[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
   const [pwaBannerPad, setPwaBannerPad] = useState(false)
   const [deviceEndpoint, setDeviceEndpoint] = useState<string>('')
   const { claimedIds, claimCode, unclaimCode } = useClaimedCodes()
@@ -248,8 +250,9 @@ export default function Dashboard() {
       })
       .catch((err: unknown) => {
         if (!active) return
-        const message = err instanceof Error ? err.message : '加载失败'
-        setLoadError(message)
+        const presentation = presentLoadError(err)
+        console.error('[Dashboard] codes load failed:', presentation.kind)
+        setLoadError(presentation.message)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -258,13 +261,13 @@ export default function Dashboard() {
     return () => {
       active = false
     }
-  }, [selectedGame])
+  }, [selectedGame, reloadToken])
 
   useEffect(() => {
     listFeaturedImages()
       .then(setFeaturedImages)
-      .catch(() => {
-        // ignore wall errors
+      .catch((err: unknown) => {
+        console.error('[Dashboard] featured images load failed:', presentLoadError(err).kind)
       })
   }, [])
 
@@ -578,8 +581,9 @@ export default function Dashboard() {
       setCodes(rows)
       setLoadError(null)
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '加载失败'
-      toast({ title: '刷新失败', description: message, variant: 'destructive' })
+      const presentation = presentLoadError(err)
+      console.error('[Dashboard] pull refresh failed:', presentation.kind)
+      toast({ title: '刷新失败', description: presentation.message, variant: 'destructive' })
     }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('nikki-badge-sync'))
@@ -592,7 +596,11 @@ export default function Dashboard() {
         action: { label: '更新', onClick: () => activateWaitingServiceWorkerAndReload() },
       })
     }
-    void listFeaturedImages().then(setFeaturedImages).catch(() => {})
+    void listFeaturedImages()
+      .then(setFeaturedImages)
+      .catch((err: unknown) => {
+        console.error('[Dashboard] featured images refresh failed:', presentLoadError(err).kind)
+      })
   }, [selectedGame, toast])
 
   const pullRefreshEnabled = !settingsOpen && !guideOpen && !feedbackOpen && !supportOpen
@@ -730,8 +738,11 @@ export default function Dashboard() {
         </div>
       ) : loadError ? (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card rounded-3xl py-12 text-center">
-          <p className="font-bold text-destructive">加载失败：{loadError}</p>
-          <p className="mt-2 text-sm text-muted-foreground">请先检查 Supabase URL / Key 是否配置正确。</p>
+          <p className="font-bold text-destructive">加载失败</p>
+          <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
+          <Button type="button" className="mt-5 rounded-full px-6" onClick={() => setReloadToken((value) => value + 1)}>
+            重新加载
+          </Button>
         </motion.div>
       ) : sortedCodes.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card flex flex-col items-center justify-center rounded-3xl py-16 text-center">
