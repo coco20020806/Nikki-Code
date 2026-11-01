@@ -1,0 +1,15 @@
+{
+  "miniprogramRoot": "dist/",
+  "projectname": "NikkiCode",
+  "description": "暖暖系列游戏兑换码查询与个人兑换记录",
+  "appid": "wxfc30c2954b69f672",
+  "setting": {
+    "urlCheck": true,
+    "es6": false,
+    "enhance": true,
+    "postcss": false,
+    "minified": false
+  },
+  "compileType": "miniprogram"
+}
+
