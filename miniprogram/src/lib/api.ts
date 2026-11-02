@@ -24,6 +24,9 @@ async function request<T>(options: Taro.request.Option): Promise<T> {
   })
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
+    if (response.statusCode === 401) {
+      Taro.removeStorageSync(TOKEN_KEY)
+    }
     throw new Error(response.data?.error || `请求失败（${response.statusCode}）`)
   }
   return response.data
