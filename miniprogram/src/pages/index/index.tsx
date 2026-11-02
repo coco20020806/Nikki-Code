@@ -8,12 +8,68 @@ import './index.scss'
 
 const TABS = ['未领取', '无限暖暖', '闪耀暖暖'] as const
 const CLAIMED_CACHE_KEY = 'nikki_claimed_cache_v1'
+const PREFERENCES_CACHE_KEY = 'nikki_mini_preferences_v1'
+
+type ServerSettings = {
+  shining: string[]
+  infinity: string[]
+}
+
+type Preferences = {
+  preferredGames: string[]
+  serverSettings: ServerSettings
+}
+
+const DEFAULT_PREFERENCES: Preferences = {
+  preferredGames: ['无限暖暖', '闪耀暖暖'],
+  serverSettings: {
+    shining: ['SN_CN'],
+    infinity: ['IN_CN'],
+  },
+}
+
+const GAME_OPTIONS = ['无限暖暖', '闪耀暖暖'] as const
+const SERVER_OPTIONS = {
+  shining: [
+    { code: 'SN_CN', label: '国服' },
+    { code: 'SN_TW', label: '台服' },
+  ],
+  infinity: [
+    { code: 'IN_CN', label: '国服' },
+    { code: 'IN_GL', label: '国际服' },
+  ],
+} as const
 
 const SERVER_LABELS: Record<string, string> = {
   SN_CN: '国服',
   SN_TW: '台服',
   IN_CN: '国服',
   IN_GL: '国际服',
+}
+
+function loadPreferences(): Preferences {
+  const stored = Taro.getStorageSync<Partial<Preferences>>(PREFERENCES_CACHE_KEY)
+  const preferredGames = Array.isArray(stored?.preferredGames)
+    ? stored.preferredGames.filter((game) => GAME_OPTIONS.includes(game as (typeof GAME_OPTIONS)[number]))
+    : []
+  const shining = Array.isArray(stored?.serverSettings?.shining)
+    ? stored.serverSettings.shining.filter((server) => SERVER_OPTIONS.shining.some((item) => item.code === server))
+    : []
+  const infinity = Array.isArray(stored?.serverSettings?.infinity)
+    ? stored.serverSettings.infinity.filter((server) => SERVER_OPTIONS.infinity.some((item) => item.code === server))
+    : []
+
+  return {
+    preferredGames: preferredGames.length ? preferredGames : [...DEFAULT_PREFERENCES.preferredGames],
+    serverSettings: {
+      shining: shining.length ? shining : [...DEFAULT_PREFERENCES.serverSettings.shining],
+      infinity: infinity.length ? infinity : [...DEFAULT_PREFERENCES.serverSettings.infinity],
+    },
+  }
+}
+
+function defaultServerForGame(gameName: string): string {
+  return gameName === '闪耀暖暖' ? 'SN_CN' : 'IN_CN'
 }
 
 function expiryLabel(expiryAt?: string): string {
@@ -28,6 +84,8 @@ function expiryLabel(expiryAt?: string): string {
 
 export default function IndexPage() {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('未领取')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [preferences, setPreferences] = useState<Preferences>(loadPreferences)
   const [codes, setCodes] = useState<NikkiCode[]>([])
   const [claimedIds, setClaimedIds] = useState<Set<number>>(
     () => new Set(Taro.getStorageSync<number[]>(CLAIMED_CACHE_KEY) || []),
@@ -38,6 +96,31 @@ export default function IndexPage() {
   const persistClaimed = (next: Set<number>) => {
     setClaimedIds(next)
     Taro.setStorageSync(CLAIMED_CACHE_KEY, [...next])
+  }
+
+  const persistPreferences = (next: Preferences) => {
+    setPreferences(next)
+    Taro.setStorageSync(PREFERENCES_CACHE_KEY, next)
+  }
+
+  const toggleGamePreference = (game: string) => {
+    const selected = preferences.preferredGames.includes(game)
+    const nextGames = selected
+      ? preferences.preferredGames.filter((item) => item !== game)
+      : [...preferences.preferredGames, game]
+    if (nextGames.length === 0) return
+    persistPreferences({ ...preferences, preferredGames: nextGames })
+  }
+
+  const toggleServerPreference = (game: keyof ServerSettings, server: string) => {
+    const current = preferences.serverSettings[game]
+    const selected = current.includes(server)
+    const nextServers = selected ? current.filter((item) => item !== server) : [...current, server]
+    if (nextServers.length === 0) return
+    persistPreferences({
+      ...preferences,
+      serverSettings: { ...preferences.serverSettings, [game]: nextServers },
+    })
   }
 
   const refresh = async () => {
@@ -70,9 +153,15 @@ export default function IndexPage() {
     const now = Date.now()
     return codes
       .filter((code) => !code.expiryAt || Date.parse(code.expiryAt) > now)
+      .filter((code) => preferences.preferredGames.includes(code.gameName))
+      .filter((code) => {
+        const gameKey = code.gameName === '闪耀暖暖' ? 'shining' : code.gameName === '无限暖暖' ? 'infinity' : null
+        if (!gameKey) return true
+        return preferences.serverSettings[gameKey].includes(code.server || defaultServerForGame(code.gameName))
+      })
       .filter((code) => (activeTab === '未领取' ? !claimedIds.has(code.id) : code.gameName === activeTab))
       .sort((a, b) => Number(b.isHighValue) - Number(a.isHighValue))
-  }, [activeTab, claimedIds, codes])
+  }, [activeTab, claimedIds, codes, preferences])
 
   const toggleClaimed = async (codeId: number, claimed: boolean) => {
     const previous = new Set(claimedIds)
@@ -96,10 +185,68 @@ export default function IndexPage() {
   return (
     <View className='page'>
       <View className='hero'>
-        <Text className='eyebrow'>NIKKI GIFT HUB</Text>
+        <View className='hero-top'>
+          <Text className='eyebrow'>NIKKI GIFT HUB</Text>
+          <Button className='settings-button' onClick={() => setSettingsOpen(true)}>偏好</Button>
+        </View>
         <Text className='title'>今天也别漏掉福利 ✨</Text>
         <Text className='subtitle'>登录状态会自动同步，换手机也能记住哪些兑换码已经领过。</Text>
       </View>
+
+      {settingsOpen ? (
+        <View className='settings-overlay'>
+          <View className='settings-panel'>
+            <View className='settings-header'>
+              <Text className='settings-title'>游戏与区服偏好</Text>
+              <Button className='settings-close' onClick={() => setSettingsOpen(false)}>完成</Button>
+            </View>
+
+            <Text className='settings-section-title'>关注的游戏</Text>
+            <View className='option-grid'>
+              {GAME_OPTIONS.map((game) => {
+                const selected = preferences.preferredGames.includes(game)
+                return (
+                  <Button
+                    key={game}
+                    className={`preference-option ${selected ? 'preference-option-active' : ''}`}
+                    onClick={() => toggleGamePreference(game)}
+                  >
+                    <Text className='option-check'>{selected ? '✓' : ''}</Text>
+                    <Text>{game}</Text>
+                  </Button>
+                )
+              })}
+            </View>
+
+            <Text className='settings-section-title settings-section-spaced'>区服偏好</Text>
+            <Text className='settings-help'>勾选你关注的区服，兑换码列表会立即过滤。</Text>
+            {([
+              { key: 'shining' as const, label: '闪耀暖暖' },
+              { key: 'infinity' as const, label: '无限暖暖' },
+            ]).map((group) => (
+              <View key={group.key} className='server-group'>
+                <Text className='server-group-title'>{group.label}</Text>
+                <View className='option-grid'>
+                  {SERVER_OPTIONS[group.key].map((item) => {
+                    const selected = preferences.serverSettings[group.key].includes(item.code)
+                    return (
+                      <Button
+                        key={item.code}
+                        className={`preference-option ${selected ? 'preference-option-active' : ''}`}
+                        onClick={() => toggleServerPreference(group.key, item.code)}
+                      >
+                        <Text className='option-check'>{selected ? '✓' : ''}</Text>
+                        <Text>{item.label}</Text>
+                      </Button>
+                    )
+                  })}
+                </View>
+              </View>
+            ))}
+            <Text className='settings-footnote'>每类至少保留一项，偏好会保存在这台设备上。</Text>
+          </View>
+        </View>
+      ) : null}
 
       <ScrollView className='tabs' scrollX enhanced showScrollbar={false}>
         <View className='tabs-inner'>
