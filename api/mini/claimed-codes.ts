@@ -21,10 +21,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
+    if (req.method === 'POST' && body?.action === 'list') {
+      const { data, error } = await supabase
+        .from('mini_claimed_codes')
+        .select('code_id')
+        .eq('user_id', userId)
+      if (error) throw error
+      return res.status(200).json({ claimedCodeIds: (data || []).map((row) => Number(row.code_id)) })
+    }
+
     const codeId = numericCodeId(body?.codeId)
     if (!codeId) return res.status(400).json({ error: '兑换码 ID 无效' })
 
-    if (req.method === 'POST') {
+    if (req.method === 'POST' && body?.action !== 'unclaim') {
       const { error } = await supabase
         .from('mini_claimed_codes')
         .upsert({ user_id: userId, code_id: codeId }, { onConflict: 'user_id,code_id' })
