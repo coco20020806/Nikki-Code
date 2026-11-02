@@ -25,7 +25,10 @@ export function sessionExpiresAt(): string {
 
 export function bearerToken(req: VercelRequest): string {
   const auth = String(req.headers.authorization || '')
-  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+  if (auth.startsWith('Bearer ')) return auth.slice(7).trim()
+
+  const miniSession = req.headers['x-mini-session']
+  return String(Array.isArray(miniSession) ? miniSession[0] : miniSession || '').trim()
 }
 
 export async function requireMiniUser(req: VercelRequest, res: VercelResponse): Promise<string | null> {
