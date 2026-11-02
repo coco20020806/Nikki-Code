@@ -2,7 +2,7 @@ import Taro from '@tarojs/taro'
 
 import type { NikkiCode } from '@/types/code'
 
-const API_BASE_URL = 'https://nikkigift.top'
+const API_BASE_URL = 'https://www.nikkigift.top'
 const TOKEN_KEY = 'nikki_mini_session_v1'
 
 type ApiEnvelope<T> = T & { error?: string }
@@ -18,7 +18,7 @@ async function request<T>(options: Taro.request.Option): Promise<T> {
     url: `${API_BASE_URL}${options.url}`,
     header: {
       'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(token ? { 'x-mini-session': token } : {}),
       ...(options.header || {}),
     },
   })
