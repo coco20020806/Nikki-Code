@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro'
 import type { NikkiCode } from '@/types/code'
 
 const API_BASE_URL = 'https://www.nikkigift.top'
-const TOKEN_KEY = 'nikki_mini_session_v1'
+const TOKEN_KEY = 'nikki_mini_session_v2'
 
 type ApiEnvelope<T> = T & { error?: string }
 
@@ -13,8 +13,13 @@ function sessionToken(): string {
 
 async function request<T>(options: Taro.request.Option): Promise<T> {
   const token = sessionToken()
+  const method = options.method || 'GET'
+  const data = token && method !== 'GET'
+    ? { ...((options.data || {}) as Record<string, unknown>), sessionToken: token }
+    : options.data
   const response = await Taro.request<ApiEnvelope<T>>({
     ...options,
+    data,
     url: `${API_BASE_URL}${options.url}`,
     header: {
       'content-type': 'application/json',
@@ -52,7 +57,8 @@ export async function listCodes(): Promise<NikkiCode[]> {
 export async function listClaimedCodeIds(): Promise<number[]> {
   const payload = await request<{ claimedCodeIds: number[] }>({
     url: '/api/mini/claimed-codes',
-    method: 'GET',
+    method: 'POST',
+    data: { action: 'list' },
   })
   return payload.claimedCodeIds
 }
@@ -60,8 +66,8 @@ export async function listClaimedCodeIds(): Promise<number[]> {
 export async function setCodeClaimed(codeId: number, claimed: boolean): Promise<void> {
   await request<{ ok: true }>({
     url: '/api/mini/claimed-codes',
-    method: claimed ? 'POST' : 'DELETE',
-    data: { codeId },
+    method: 'POST',
+    data: { action: claimed ? 'claim' : 'unclaim', codeId },
   })
 }
 
