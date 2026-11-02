@@ -28,7 +28,15 @@ export function bearerToken(req: VercelRequest): string {
   if (auth.startsWith('Bearer ')) return auth.slice(7).trim()
 
   const miniSession = req.headers['x-mini-session']
-  return String(Array.isArray(miniSession) ? miniSession[0] : miniSession || '').trim()
+  const headerToken = String(Array.isArray(miniSession) ? miniSession[0] : miniSession || '').trim()
+  if (headerToken) return headerToken
+
+  try {
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
+    return String(body?.sessionToken || '').trim()
+  } catch {
+    return ''
+  }
 }
 
 export async function requireMiniUser(req: VercelRequest, res: VercelResponse): Promise<string | null> {
