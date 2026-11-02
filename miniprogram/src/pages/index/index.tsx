@@ -45,8 +45,12 @@ export default function IndexPage() {
     try {
       await ensureMiniSession()
       const [nextCodes, cloudClaims] = await Promise.all([listCodes(), listClaimedCodeIds()])
+      const localClaims = new Set(Taro.getStorageSync<number[]>(CLAIMED_CACHE_KEY) || [])
+      const cloudClaimSet = new Set(cloudClaims)
+      const pendingUploads = [...localClaims].filter((codeId) => !cloudClaimSet.has(codeId))
+      await Promise.allSettled(pendingUploads.map((codeId) => setCodeClaimed(codeId, true)))
       setCodes(nextCodes)
-      persistClaimed(new Set(cloudClaims))
+      persistClaimed(new Set([...cloudClaims, ...localClaims]))
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败，请稍后重试')
     } finally {
